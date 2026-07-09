@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GLO E-Lottery — สำนักงานสลากกินแบ่งรัฐบาล</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800;900&family=Prompt:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- Cross-browser barcode fallback for browsers without native BarcodeDetector (Firefox/Safari) -->
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<style>
+/* ============================================================
+   GLO E-LOTTERY — PIXEL-PERFECT UI
+   Colors sampled from official app screenshots
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-family:'Noto Sans Thai','Prompt',-apple-system,sans-serif}
+:root{
+  /* Background gradient (home / result screens) */
+  --bg-top:#EAF3FE; --bg-bot:#F4F9FF;
+  /* GLO brand blues */
+  --blue:#1B62D6;        /* primary buttons / numbers */
+  --blue-deep:#0B3E9E;   /* pressed / titles */
+  --blue-mid:#2F6BE0;
+  --blue-soft:#DCEAFD;   /* chips / active tabs */
+  --blue-tint:#EEF5FF;   /* icon squares */
+  --gold:#F4B821;        /* logo swoosh */
+  --seal-blue:#1C4E9E; --seal-gold:#D9A21B;
+  --green:#18A957; --green-soft:#E4F7EC;
+  --red:#E4572E;
+  --ink:#1A2B4A; --ink-soft:#6B7A99; --line:#EAF0F8;
+  --card:#FFFFFF; --white:#fff;
+  --nav-inactive:#9DAAC2;
+}
+body{background:#2A3550;display:flex;justify-content:center;min-height:100vh}
+.app{position:relative;width:100%;max-width:420px;min-height:100vh;background:linear-gradient(180deg,var(--bg-top) 0%,var(--bg-bot) 34%,#fff 60%);overflow:hidden;box-shadow:0 0 50px rgba(0,0,0,.35)}
+
+/* screens */
+.screen{display:none;flex-direction:column;min-height:100vh;animation:fade .28s ease}
+.screen.active{display:flex}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:88px}
+.scroll::-webkit-scrollbar{display:none}
+
+/* ============ GLO LOGO (SVG) ============ */
+.logo-lockup{display:flex;align-items:center;gap:11px}
+.glo-logo{height:34px;width:auto;display:block}
+.glo-divider{width:1.5px;height:34px;background:#C9D6EA}
+.glo-seal{height:40px;width:40px}
+.logo-caption{margin-top:2px}
+.logo-caption .th{font-size:8px;color:#3B4E70;font-weight:600;line-height:1.1;letter-spacing:.1px}
+.logo-caption .en{font-size:6.5px;color:#7C8BA8;font-weight:500;letter-spacing:.3px;line-height:1.3}
+
+/* ============ HEADER ============ */
+.top-header{padding:14px 18px 8px;display:flex;align-items:flex-start;justify-content:space-between}
+.top-header .brand-col{display:flex;flex-direction:column}
+.round-btn{width:38px;height:38px;border-radius:50%;background:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(27,98,214,.14);flex-shrink:0}
+.round-btn svg{width:18px;height:18px;stroke:var(--blue);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+
+/* status bar mock */
+.statusbar{display:flex;justify-content:space-between;align-items:center;padding:8px 20px 0;font-size:14px;font-weight:700;color:#1A2B4A}
+.statusbar .sb-right{display:flex;gap:6px;align-items:center}
+.statusbar .sb-right svg{width:17px;height:12px;fill:#1A2B4A}
+
+/* ============ DATE ROW ============ */
+.date-row{display:flex;align-items:center;gap:8px;padding:6px 20px 14px;font-size:15px;font-weight:600;color:var(--ink)}
+.date-row svg{width:19px;height:19px}
+
+/* ============ QUICK ACTION CARDS ============ */
+.quick-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 18px 14px}
+.quick-card{background:#fff;border-radius:18px;padding:15px 14px;border:none;cursor:pointer;text-align:left;box-shadow:0 4px 16px rgba(27,98,214,.08);display:flex;flex-direction:column;gap:10px;transition:transform .12s}
+.quick-card:active{transform:scale(.97)}
+.quick-ic{width:46px;height:46px;border-radius:13px;background:var(--blue-tint);display:flex;align-items:center;justify-content:center}
+.quick-ic svg{width:26px;height:26px;stroke:var(--blue);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.quick-card .qt{font-size:15px;font-weight:700;color:var(--ink)}
+.quick-card .qs{font-size:11.5px;font-weight:400;color:var(--ink-soft);line-height:1.4;margin-top:2px}
+
+/* ============ HERO BANNER ============ */
+.hero{margin:2px 18px 16px;border-radius:22px;background:linear-gradient(120deg,#CFE3FF 0%,#B9D6FF 55%,#A9CCFF 100%);padding:20px 18px;position:relative;overflow:hidden;min-height:150px;display:flex;align-items:center}
+.hero-txt{position:relative;z-index:2;max-width:57%}
+.hero-txt h2{font-size:20px;font-weight:800;color:var(--blue-deep);line-height:1.32}
+.hero-txt p{font-size:12.5px;color:#42598A;margin:7px 0 14px;font-weight:500}
+.hero-cta{display:inline-flex;align-items:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:24px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 6px 16px rgba(27,98,214,.4)}
+.hero-cta svg{width:15px;height:15px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.hero-art{position:absolute;right:-6px;bottom:-4px;width:180px;height:auto;z-index:1}
+
+/* ============ RESULTS CARD ============ */
+.card{background:#fff;border-radius:20px;box-shadow:0 4px 18px rgba(27,98,214,.07)}
+.results{margin:0 18px 16px;padding:16px 15px}
+.results-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px}
+.results-head h3{font-size:15.5px;font-weight:700;color:var(--ink)}
+.results-head span{font-size:11.5px;color:var(--ink-soft);font-weight:500}
+.results-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rcell{background:var(--bg-bot);border:1px solid #EDF3FC;border-radius:14px;padding:11px 8px;text-align:center}
+.rcell .rl{font-size:11.5px;color:var(--ink-soft);font-weight:500;margin-bottom:3px}
+.rcell .rn{font-size:28px;font-weight:800;color:var(--blue);letter-spacing:1px;line-height:1}
+.rcell .rn.small{font-size:23px;letter-spacing:1px}
+.rcell .rn .sep{display:inline-block;width:14px}
+
+/* ============ SERVICES ============ */
+.svc{margin:2px 18px 22px}
+.svc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}
+.svc-head h3{font-size:15.5px;font-weight:700;color:var(--ink)}
+.svc-head a{font-size:13px;color:var(--blue);font-weight:600;text-decoration:none;display:flex;align-items:center;gap:3px}
+.svc-head a svg{width:13px;height:13px;stroke:var(--blue);stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.svc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.svc-item{display:flex;flex-direction:column;align-items:center;gap:8px;border:none;background:none;cursor:pointer;padding:2px}
+.svc-ic{width:56px;height:56px;border-radius:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,.05)}
+.svc-ic svg{width:28px;height:28px;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.svc-ic.red{background:#FDEBE4}.svc-ic.red svg{stroke:var(--red)}
+.svc-ic.green{background:var(--green-soft)}.svc-ic.green svg{stroke:var(--green)}
+.svc-ic.blue{background:var(--blue-tint)}.svc-ic.blue svg{stroke:var(--blue)}
+.svc-ic.gold{background:#FEF3D8}.svc-ic.gold svg{stroke:#E39A0C}
+.svc-item span{font-size:11.5px;font-weight:600;color:var(--ink);text-align:center;line-height:1.25}
+
+/* ============ BOTTOM NAV ============ */
+.bottom-nav{position:absolute;bottom:0;left:0;right:0;height:78px;background:#fff;border-top:1px solid var(--line);display:flex;padding-bottom:14px;box-shadow:0 -4px 20px rgba(27,98,214,.06);z-index:50}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:none;background:none;cursor:pointer;color:var(--nav-inactive);padding-top:12px}
+.nav-item svg{width:25px;height:25px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.nav-item span{font-size:11px;font-weight:600}
+.nav-item.active{color:var(--blue)}
+.nav-item.active svg{fill:var(--blue);stroke:var(--blue)}
+.nav-item.active.no-fill svg{fill:none}
+
+/* ============ PAGE HEADER (title screens) ============ */
+.page-head{padding:6px 20px 12px;display:flex;align-items:center;justify-content:space-between}
+.page-head h1{font-size:26px;font-weight:800;color:var(--ink)}
+.nav-back{padding:10px 18px 8px;display:flex;align-items:center;gap:14px;position:relative}
+.nav-back .round-btn{box-shadow:0 3px 10px rgba(27,98,214,.14)}
+.nav-back h2{font-size:18px;font-weight:700;color:var(--blue-deep);position:absolute;left:0;right:0;text-align:center;pointer-events:none}
+.nav-back.on-blue{background:transparent}
+
+/* ============ MY TICKETS ============ */
+.seg{display:flex;background:#fff;border-radius:15px;padding:5px;margin:6px 18px 14px;box-shadow:0 3px 12px rgba(27,98,214,.07)}
+.seg button{flex:1;padding:11px;border:none;background:none;border-radius:11px;font-size:14px;font-weight:600;color:var(--ink-soft);cursor:pointer;transition:.15s}
+.seg button.on{background:var(--blue-soft);color:var(--blue)}
+.tkt-strip{display:flex;align-items:center;justify-content:space-between;background:#fff;border-radius:16px;margin:0 18px 16px;padding:13px 15px;box-shadow:0 3px 12px rgba(27,98,214,.06)}
+.tkt-strip .ts-left{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:var(--ink)}
+.tkt-strip .ts-left svg{width:19px;height:19px;stroke:var(--blue);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mini-scan{display:flex;align-items:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer}
+.mini-scan svg{width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.empty{margin:0 18px;background:#fff;border-radius:20px;padding:44px 26px;display:flex;flex-direction:column;align-items:center;text-align:center;box-shadow:0 4px 18px rgba(27,98,214,.06)}
+.empty-illus{width:150px;height:130px;margin-bottom:20px}
+.empty h3{font-size:19px;font-weight:800;color:var(--blue);margin-bottom:9px}
+.empty p{font-size:13px;color:var(--ink-soft);line-height:1.7}
+.tkt-list{padding:0 18px}
+.tkt-item{background:#fff;border-radius:16px;margin-bottom:11px;padding:15px 16px;box-shadow:0 3px 12px rgba(27,98,214,.06);cursor:pointer;display:flex;align-items:center;gap:13px}
+.tkt-item .tnum{font-size:23px;font-weight:800;color:var(--blue);letter-spacing:1.5px;flex:1}
+.tkt-item .tsub{font-size:11px;color:var(--ink-soft);margin-top:3px;letter-spacing:0}
+.tbadge{font-size:11px;font-weight:700;padding:6px 13px;border-radius:20px;white-space:nowrap}
+.tbadge.saved{background:var(--blue-soft);color:var(--blue)}
+.tbadge.won{background:var(--green-soft);color:var(--green)}
+
+/* ============ SCAN SCREEN (dark) ============ */
+#scan{background:#050608}
+#scan-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.92}
+.scan-topbar{position:absolute;top:0;left:0;right:0;z-index:20;padding:50px 18px 14px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(180deg,rgba(0,0,0,.6),transparent)}
+.scan-topbar h2{color:#fff;font-size:18px;font-weight:700}
+.scan-glass{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.3)}
+.scan-glass svg{width:19px;height:19px;stroke:var(--blue);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.scan-glass.flash svg{stroke:#fff}.scan-glass.flash{background:rgba(255,255,255,.16);backdrop-filter:blur(6px)}
+.scan-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:10}
+.frame{width:280px;height:200px;position:relative}
+.corner{position:absolute;width:38px;height:38px;border:3.5px solid #fff;border-radius:3px}
+.corner.tl{top:0;left:0;border-right:none;border-bottom:none;border-radius:8px 0 0 0}
+.corner.tr{top:0;right:0;border-left:none;border-bottom:none;border-radius:0 8px 0 0}
+.corner.bl{bottom:0;left:0;border-right:none;border-top:none;border-radius:0 0 0 8px}
+.corner.br{bottom:0;right:0;border-left:none;border-top:none;border-radius:0 0 8px 0}
+.laser{position:absolute;left:6px;right:6px;height:2.5px;background:linear-gradient(90deg,transparent,#3E8BFF 20%,#8Fc0ff,#3E8BFF 80%,transparent);box-shadow:0 0 14px 2px #3E8BFF;border-radius:2px;animation:scanmove 2.2s ease-in-out infinite}
+@keyframes scanmove{0%,100%{top:8px}50%{top:190px}}
+.scan-hint{position:absolute;left:0;right:0;bottom:128px;text-align:center;color:rgba(255,255,255,.86);font-size:13.5px;padding:0 40px;z-index:15;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+.scan-foot{position:absolute;left:0;right:0;bottom:0;z-index:20;padding:16px 18px 42px;background:linear-gradient(0deg,rgba(0,0,0,.9),transparent)}
+.scan-status{color:rgba(255,255,255,.75);font-size:12.5px;text-align:center;margin-bottom:12px;min-height:18px}
+.btn-primary{width:100%;padding:16px;background:var(--blue);color:#fff;border:none;border-radius:16px;font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(27,98,214,.4)}
+.btn-primary:active{transform:scale(.99)}
+.btn-primary[disabled]{opacity:.45;pointer-events:none;box-shadow:none}
+
+/* ============ CAPTURE ============ */
+.cap-scr{background:#050608}
+.cap-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cap-mask{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:5}
+.cap-frame{width:86%;max-width:330px;aspect-ratio:2.05/1;border:2.5px solid rgba(255,255,255,.85);border-radius:12px;box-shadow:0 0 0 2000px rgba(0,0,0,.52)}
+.cap-hint{position:absolute;left:0;right:0;bottom:150px;text-align:center;color:rgba(255,255,255,.85);font-size:13px;padding:0 30px;z-index:8;text-shadow:0 1px 6px rgba(0,0,0,.9);line-height:1.6}
+.cap-bar{position:absolute;left:0;right:0;bottom:0;z-index:20;padding:18px 30px 40px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(0deg,rgba(0,0,0,.9),transparent)}
+.cap-thumb{width:52px;height:38px;border-radius:8px;object-fit:cover;border:2px solid rgba(255,255,255,.55);background:rgba(255,255,255,.08);display:none}
+.shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.shutter::after{content:'';width:56px;height:56px;border-radius:50%;background:#fff;transition:.12s}
+.shutter:active::after{width:50px;height:50px}
+.cap-next{background:var(--blue);color:#fff;border:none;border-radius:12px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer;opacity:.4;pointer-events:none;transition:.2s}
+.cap-next.on{opacity:1;pointer-events:all}
+canvas{display:none}
+
+/* ============ PROCESSING ============ */
+#processing{background:#fff;justify-content:center;align-items:center}
+.proc{text-align:center;padding:30px 30px;width:100%}
+.proc-orb{width:84px;height:84px;border-radius:50%;background:var(--blue-tint);display:flex;align-items:center;justify-content:center;margin:0 auto 22px;animation:pulse 1.6s ease-in-out infinite}
+.proc-orb svg{width:40px;height:40px;stroke:var(--blue);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+@keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(27,98,214,.25)}50%{transform:scale(1.06);box-shadow:0 0 0 16px rgba(27,98,214,0)}}
+.proc h2{font-size:20px;font-weight:800;color:var(--ink);margin-bottom:5px}
+.proc .psub{font-size:14px;color:var(--ink-soft);margin-bottom:28px}
+.psteps{text-align:left;max-width:290px;margin:0 auto}
+.pstep{display:flex;align-items:center;gap:14px;padding:11px 0}
+.pdot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;background:var(--bg-bot);color:var(--ink-soft);transition:.3s}
+.pdot.act{background:var(--blue-tint);color:var(--blue);animation:pulse 1s infinite}
+.pdot.done{background:var(--green);color:#fff}
+.plabel{font-size:13.5px;font-weight:500;color:var(--ink-soft)}
+.plabel.act{color:var(--blue);font-weight:700}
+.plabel.done{color:var(--ink)}
+
+/* ============ VERIFY ============ */
+#verify,#claim{background:linear-gradient(180deg,var(--bg-top),#fff 40%)}
+.vscroll{flex:1;overflow-y:auto;padding:8px 18px 30px}
+.vscroll::-webkit-scrollbar{display:none}
+.tcard{background:#fff;border-radius:20px;padding:16px;box-shadow:0 4px 18px rgba(27,98,214,.08);margin-bottom:14px}
+.tcard-title{font-size:16px;font-weight:800;color:var(--blue-deep);margin-bottom:12px}
+/* ticket graphic */
+.ticket{display:flex;border-radius:10px;overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.14);border:1px solid #E3E9F2}
+.ticket-l{width:38%;background:linear-gradient(160deg,#2E6Fc9,#1C4E9E);position:relative;display:flex;flex-direction:column;justify-content:space-between;padding:9px;min-height:118px}
+.ticket-l .seal-w{filter:brightness(0) invert(1);opacity:.85}
+.ticket-l .glo-mini{color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px}
+.ticket-l .glo-mini em{color:var(--gold);font-style:normal}
+.ticket-r{flex:1;background:linear-gradient(180deg,#FBF6E4,#FDF3E9);padding:8px 10px;position:relative}
+.tnum-box{background:#FBEFC9;border:1px solid #E8D9A0;border-radius:4px;padding:5px 4px;display:flex;justify-content:space-around}
+.tnum-box .d{display:flex;flex-direction:column;align-items:center}
+.tnum-box .d b{font-size:22px;font-weight:800;color:#2A2A2A;line-height:1}
+.tnum-box .d small{font-size:6px;color:#7A6A3A;margin-top:1px}
+.tdate{text-align:center;margin-top:6px}
+.tdate .th{font-size:12px;font-weight:700;color:#222}
+.tdate .en{font-size:10px;font-weight:600;color:var(--blue)}
+.tmeta{display:flex;justify-content:center;gap:6px;margin-top:5px;font-size:9px;color:var(--blue);font-weight:600;align-items:center}
+.tmeta .chip{background:#fff;border:1px solid #E3D9B8;border-radius:3px;padding:1px 5px;color:#333}
+.tbar{margin-top:7px;text-align:center}
+.tbar .bars{height:22px;background:repeating-linear-gradient(90deg,#222 0 1.5px,transparent 1.5px 3px,#222 3px 4px,transparent 4px 7px);border-radius:1px}
+.tbar .code{font-size:8.5px;color:#333;letter-spacing:1px;margin-top:2px;font-weight:600}
+/* stats */
+.stat-row{display:flex;margin-top:16px;border-top:1px solid var(--line);padding-top:2px}
+.stat{flex:1;text-align:center;padding:11px 4px;border-right:1px solid var(--line)}
+.stat:last-child{border-right:none}
+.stat .sl{font-size:10px;color:var(--ink-soft);margin-bottom:4px}
+.stat .sv{font-size:15px;font-weight:800;color:var(--blue)}
+/* check rows */
+.checks{background:#fff;border-radius:20px;box-shadow:0 4px 18px rgba(27,98,214,.07);overflow:hidden;margin-bottom:14px}
+.crow{display:flex;align-items:center;gap:13px;padding:15px 17px;border-bottom:1px solid var(--line)}
+.crow:last-child{border-bottom:none}
+.cic{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cic svg{width:19px;height:19px;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.cic.ok{background:var(--green-soft)}.cic.ok svg{stroke:var(--green)}
+.cic.info{background:var(--blue-tint)}.cic.info svg{stroke:var(--blue)}
+.cic.warn{background:#FEF3D8}.cic.warn svg{stroke:#E39A0C}
+.cic.bad{background:#FDE7E1}.cic.bad svg{stroke:var(--red)}
+.clabel{flex:1;font-size:14px;color:var(--ink);font-weight:500}
+.cval{font-size:14px;font-weight:700}
+.cval.ok{color:var(--green)}.cval.blue{color:var(--blue)}.cval.warn{color:#E39A0C}.cval.bad{color:var(--red)}.cval.mut{color:var(--ink-soft);font-weight:600}
+.btn-outline{width:100%;padding:15px;background:#fff;color:var(--blue);border:1.6px solid var(--blue);border-radius:16px;font-size:16px;font-weight:700;cursor:pointer;margin-top:11px}
+.v-cta{margin-top:2px}
+
+/* ============ PRIZE ============ */
+#prize{background:linear-gradient(180deg,var(--bg-top),#F4F9FF 40%)}
+.prize-card{margin:12px 18px 16px;background:#fff;border-radius:22px;padding:28px 22px 26px;text-align:center;box-shadow:0 6px 22px rgba(27,98,214,.1);position:relative;overflow:hidden}
+.confetti{position:absolute;inset:0;pointer-events:none}
+.confetti i{position:absolute;width:8px;height:8px;border-radius:2px;opacity:.9}
+.star{width:78px;height:78px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;margin:6px auto 16px;box-shadow:0 10px 26px rgba(27,98,214,.4);position:relative;z-index:2}
+.star svg{width:38px;height:38px;fill:#fff}
+.prize-card h2{font-size:26px;font-weight:900;color:var(--blue-deep);position:relative;z-index:2}
+.prize-card .pcong{font-size:15px;color:var(--ink);margin:6px 0 12px;font-weight:500;position:relative;z-index:2}
+.prize-amt{font-size:44px;font-weight:900;color:var(--green);letter-spacing:-1px;line-height:1;position:relative;z-index:2}
+.prize-amt small{font-size:19px;font-weight:700;margin-left:6px}
+.detail{margin:0 18px 16px;background:#fff;border-radius:20px;box-shadow:0 4px 18px rgba(27,98,214,.07);overflow:hidden}
+.detail-h{padding:14px 17px 4px;font-size:15px;font-weight:800;color:var(--blue-deep)}
+.drow{display:flex;align-items:center;gap:13px;padding:14px 17px;border-bottom:1px solid var(--line)}
+.drow:last-child{border-bottom:none}
+.drow .dic{width:26px;display:flex;justify-content:center}
+.drow .dic svg{width:21px;height:21px;stroke:var(--blue);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.drow .dic.g svg{stroke:var(--green)}
+.drow .dl{flex:1;font-size:14px;color:var(--ink-soft)}
+.drow .dv{font-size:15px;font-weight:700;color:var(--blue)}
+.drow .dv.g{color:var(--green)}.drow .dv.ink{color:var(--ink)}
+.claim-btn{margin:2px 18px 24px;display:flex;align-items:center;justify-content:center;gap:9px;width:calc(100% - 36px);padding:16px;background:var(--blue);color:#fff;border:none;border-radius:16px;font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(27,98,214,.38)}
+.claim-btn svg{width:21px;height:21px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ============ CLAIM ============ */
+.bankcard{margin:8px 18px 14px;background:#fff;border-radius:20px;padding:17px;box-shadow:0 4px 18px rgba(27,98,214,.07)}
+.bankcard .bh{font-size:15px;font-weight:800;color:var(--blue-deep);margin-bottom:14px}
+.bank-row{display:flex;align-items:flex-start;gap:14px}
+.bank-logo{width:54px;height:54px;border-radius:14px;background:#0C9;background:linear-gradient(145deg,#00A6E6,#0072BC);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.bank-logo svg{width:34px;height:34px;fill:#fff}
+.bank-info{flex:1}
+.bank-info .bn{font-size:16px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bank-info .bn .pri{font-size:11px;font-weight:700;color:var(--blue);background:var(--blue-soft);padding:3px 10px;border-radius:14px}
+.bank-info .bacc{font-size:14px;color:var(--ink-soft);margin-top:3px;letter-spacing:1px}
+.bank-info .bown{font-size:12.5px;color:var(--ink-soft);margin-top:3px}
+.info-box{margin:0 18px 16px;background:var(--blue-tint);border-radius:16px;padding:15px 16px;display:flex;gap:12px}
+.info-box .ii{flex-shrink:0}
+.info-box .ii svg{width:22px;height:22px;stroke:var(--blue);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.info-box p{font-size:13px;color:var(--ink);line-height:1.65}
+.info-box p .mut{color:var(--ink-soft);display:block;margin-top:5px}
+.claim-acts{padding:2px 18px 30px}
+
+/* ============ SUCCESS ============ */
+#success{background:linear-gradient(180deg,var(--bg-top),#F4F9FF 45%);justify-content:flex-start}
+.succ-card{margin:14px 18px;background:#fff;border-radius:24px;padding:34px 24px 30px;text-align:center;box-shadow:0 8px 26px rgba(27,98,214,.1);position:relative;overflow:hidden}
+.succ-ring{width:96px;height:96px;border-radius:50%;background:var(--green-soft);display:flex;align-items:center;justify-content:center;margin:6px auto 20px;position:relative}
+.succ-core{width:74px;height:74px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(24,169,87,.4)}
+.succ-core svg{width:38px;height:38px;stroke:#fff;fill:none;stroke-width:3.4;stroke-linecap:round;stroke-linejoin:round}
+.succ-spark{position:absolute;color:#7FD3F7;font-size:16px}
+.succ-card h2{font-size:24px;font-weight:900;color:var(--green);margin-bottom:6px}
+.succ-card .ssub{font-size:14px;color:var(--ink-soft);margin-bottom:24px}
+.succ-detail{background:var(--bg-bot);border-radius:16px;overflow:hidden;text-align:left}
+.srow{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:none}
+.srow .sic{width:22px;display:flex;justify-content:center}
+.srow .sic svg{width:20px;height:20px;stroke:var(--blue);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.srow .sic.g svg{stroke:var(--green)}
+.srow .sl{flex:1;font-size:13px;color:var(--ink-soft)}
+.srow .sv{font-size:14px;font-weight:700;color:var(--ink)}
+.srow .sv.g{color:var(--green)}
+.succ-acts{padding:0 18px}
+
+/* ============ PIN OVERLAY ============ */
+.pin-ov{position:absolute;inset:0;z-index:200;background:rgba(10,20,40,.55);display:none;flex-direction:column;justify-content:flex-end}
+.pin-ov.show{display:flex}
+.pin-sheet{background:#fff;border-radius:26px 26px 0 0;padding:24px 22px 34px;animation:sheetup .3s ease}
+@keyframes sheetup{from{transform:translateY(100%)}to{transform:none}}
+.pin-sheet h3{font-size:19px;font-weight:800;color:var(--ink);text-align:center;margin-bottom:5px}
+.pin-sheet p{font-size:13px;color:var(--ink-soft);text-align:center;margin-bottom:22px}
+.pin-dots{display:flex;justify-content:center;gap:15px;margin-bottom:26px}
+.pin-dots i{width:15px;height:15px;border-radius:50%;border:2px solid #CBD8EC;transition:.15s}
+.pin-dots i.on{background:var(--blue);border-color:var(--blue)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;max-width:290px;margin:0 auto}
+.pad button{padding:16px;border:none;background:var(--bg-bot);border-radius:14px;font-size:23px;font-weight:700;color:var(--ink);cursor:pointer}
+.pad button:active{background:var(--blue-soft)}
+.pad button.fn{font-size:15px;font-weight:600;color:var(--ink-soft);background:transparent}
+.pad button.del svg{width:22px;height:22px;stroke:var(--red);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* toast */
+.toast{position:absolute;bottom:100px;left:50%;transform:translateX(-50%) translateY(12px);background:rgba(15,25,45,.94);color:#fff;padding:11px 22px;border-radius:24px;font-size:13.5px;font-weight:500;opacity:0;transition:.3s;z-index:999;white-space:nowrap;pointer-events:none;max-width:90%}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+<!-- ============ HOME ============ -->
+<section id="home" class="screen active">
+  <div class="statusbar"><span>9:41</span><span class="sb-right">
+    <svg viewBox="0 0 20 14"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="11" rx="1"/><rect x="15" y="0" width="3" height="13" rx="1"/></svg>
+    <svg viewBox="0 0 18 14"><path d="M9 11.5a1.4 1.4 0 100 2.8 1.4 1.4 0 000-2.8zM2 5.5a10 10 0 0114 0M4.6 8.2a6 6 0 018.8 0"/></svg>
+    <svg viewBox="0 0 26 14"><rect x="0.5" y="1" width="21" height="12" rx="3" fill="none" stroke="#1A2B4A"/><rect x="2.5" y="3" width="17" height="8" rx="1.5"/><rect x="23" y="4.5" width="2" height="5" rx="1"/></svg>
+  </span></div>
+  <div class="top-header">
+    <div class="brand-col" id="logo-home"></div>
+    <button class="round-btn" onclick="toast('เปิดโปรไฟล์ผู้ใช้')"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+  </div>
+  <div class="scroll">
+    <div class="date-row"><svg viewBox="0 0 24 24" fill="none" stroke="#1B62D6" stroke-width="2" stroke-linecap="round"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>งวดวันที่ 1 ก.ค. 2569</div>
+    <div class="quick-row">
+      <button class="quick-card" onclick="startScan()">
+        <div class="quick-ic"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2M4 12h16"/></svg></div>
+        <div><div class="qt">สแกนเก็บสลาก</div><div class="qs">สแกนสลากฯ จริง<br>เก็บในบัญชี</div></div>
+      </button>
+      <button class="quick-card" onclick="showTickets()">
+        <div class="quick-ic"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3a2 2 0 000-4V7z"/><path d="M14 5v14"/></svg></div>
+        <div><div class="qt">สลากของฉัน</div><div class="qs">ดูสลากที่เก็บไว้<br>ในบัญชี</div></div>
+      </button>
+    </div>
+    <div class="hero">
+      <div class="hero-txt">
+        <h2>สแกนสลากฯ จริง<br>เก็บในบัญชีได้ง่าย ๆ</h2>
+        <p>ขึ้นเงินรางวัลได้ในแอป</p>
+        <button class="hero-cta" onclick="startScan()">สแกนเลย <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </div>
+      <svg class="hero-art" viewBox="0 0 180 150" fill="none">
+        <rect x="58" y="18" width="86" height="120" rx="13" fill="#fff" stroke="#B9D0F2" stroke-width="2"/>
+        <rect x="66" y="30" width="70" height="96" rx="7" fill="#EAF2FE"/>
+        <g transform="rotate(-14 96 74)">
+          <rect x="52" y="58" width="92" height="42" rx="4" fill="#fff" stroke="#D8C48A"/>
+          <rect x="52" y="58" width="34" height="42" rx="4" fill="#2E6FC9"/>
+          <rect x="90" y="63" width="48" height="13" rx="2" fill="#FBEFC9"/>
+          <text x="114" y="73" font-size="9" font-weight="800" fill="#333" text-anchor="middle">123456</text>
+          <rect x="92" y="88" width="44" height="7" fill="#333"/>
+        </g>
+        <rect x="30" y="70" width="6" height="2" rx="1" fill="#3E8BFF"/>
+        <path d="M30 71 L150 71" stroke="#3E8BFF" stroke-width="2" opacity=".85"/>
+        <circle cx="126" cy="118" r="15" fill="#2E6FC9"/>
+        <path d="M120 118l4 4 8-8" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <g fill="#FBD34D"><circle cx="46" cy="46" r="2.5"/><circle cx="150" cy="96" r="2"/><circle cx="40" cy="112" r="2"/></g>
+      </svg>
+    </div>
+    <div class="card results">
+      <div class="results-head"><h3>ผลรางวัลสลากกินแบ่งรัฐบาล</h3><span>งวดวันที่ 1 ก.ค. 2569</span></div>
+      <div class="results-grid">
+        <div class="rcell"><div class="rl">รางวัลที่ 1</div><div class="rn">039184</div></div>
+        <div class="rcell"><div class="rl">เลขท้าย 2 ตัว</div><div class="rn">59</div></div>
+        <div class="rcell"><div class="rl">เลขหน้า 3 ตัว</div><div class="rn small">972<span class="sep"></span>127</div></div>
+        <div class="rcell"><div class="rl">เลขท้าย 3 ตัว</div><div class="rn small">807<span class="sep"></span>545</div></div>
+      </div>
+    </div>
+    <div class="svc">
+      <div class="svc-head"><h3>บริการของเรา</h3><a onclick="toast('บริการทั้งหมด')">ดูทั้งหมด <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></a></div>
+      <div class="svc-grid">
+        <button class="svc-item" onclick="toast('ซื้อสลากดิจิทัล')"><div class="svc-ic red"><svg viewBox="0 0 24 24"><path d="M4 5h2l2.5 12h9L20 8H7"/><circle cx="9.5" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg></div><span>ซื้อสลากดิจิทัล</span></button>
+        <button class="svc-item" onclick="startScan()"><div class="svc-ic green"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2M4 12h16"/></svg></div><span>สแกนเก็บ</span></button>
+        <button class="svc-item" onclick="showTickets()"><div class="svc-ic blue"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16 16l4 4"/></svg></div><span>ตรวจรางวัล</span></button>
+        <button class="svc-item" onclick="toast('ขึ้นเงินรางวัล')"><div class="svc-ic gold"><svg viewBox="0 0 24 24"><path d="M3 8a2 2 0 012-2h12a2 2 0 012 2v1h1a1 1 0 011 1v6a1 1 0 01-1 1H5a2 2 0 01-2-2V8z"/><circle cx="16.5" cy="13" r="1.3" fill="#E39A0C" stroke="none"/></svg></div><span>ขึ้นเงินรางวัล</span></button>
+      </div>
+    </div>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-item active no-fill" onclick="go('home')"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1v-8z"/></svg><span>หน้าหลัก</span></button>
+    <button class="nav-item" onclick="showTickets()"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3a2 2 0 000-4V7z"/></svg><span>สลากของฉัน</span></button>
+    <button class="nav-item" onclick="toast('ผลรางวัล')"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>ผลรางวัล</span></button>
+  </nav>
+</section>
+
+<!-- ============ MY TICKETS ============ -->
+<section id="tickets" class="screen">
+  <div class="statusbar"><span>9:41</span><span class="sb-right">
+    <svg viewBox="0 0 20 14"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="11" rx="1"/><rect x="15" y="0" width="3" height="13" rx="1"/></svg>
+    <svg viewBox="0 0 18 14"><path d="M9 11.5a1.4 1.4 0 100 2.8 1.4 1.4 0 000-2.8zM2 5.5a10 10 0 0114 0M4.6 8.2a6 6 0 018.8 0"/></svg>
+    <svg viewBox="0 0 26 14"><rect x="0.5" y="1" width="21" height="12" rx="3" fill="none" stroke="#1A2B4A"/><rect x="2.5" y="3" width="17" height="8" rx="1.5"/><rect x="23" y="4.5" width="2" height="5" rx="1"/></svg>
+  </span></div>
+  <div class="top-header"><div class="brand-col" id="logo-tickets"></div></div>
+  <div class="page-head"><h1>สลากของฉัน</h1><button class="round-btn" onclick="toast('ค้นหา')"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16 16l4 4"/></svg></button></div>
+  <div class="seg"><button class="on">งวดปัจจุบัน</button><button onclick="toast('งวดย้อนหลัง')">งวดย้อนหลัง</button></div>
+  <div class="tkt-strip">
+    <div class="ts-left"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg>สลากฯ งวดวันที่ 1 ก.ค. 2569</div>
+    <button class="mini-scan" onclick="startScan()"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2M4 12h16"/></svg>สแกนเก็บ</button>
+  </div>
+  <div class="scroll">
+    <div id="tkt-list" class="tkt-list"></div>
+    <div id="tkt-empty" class="empty">
+      <svg class="empty-illus" viewBox="0 0 150 130" fill="none">
+        <circle cx="75" cy="62" r="52" fill="#EAF2FE"/>
+        <g transform="rotate(-8 75 62)">
+          <rect x="30" y="40" width="90" height="46" rx="7" fill="#fff" stroke="#9EC2F5" stroke-width="2.5"/>
+          <path d="M75 40v46" stroke="#9EC2F5" stroke-width="2" stroke-dasharray="3 3"/>
+          <rect x="38" y="49" width="17" height="17" rx="2" fill="none" stroke="#9EC2F5" stroke-width="2"/>
+          <path d="M41 52h4v4h-4zM48 52h4M48 59h4v4M41 62h4" stroke="#9EC2F5" stroke-width="1.6"/>
+          <g stroke="#9EC2F5" stroke-width="2" stroke-linecap="round"><path d="M86 50v26M92 50v26M98 50v26M104 50v26M110 52v22"/></g>
+        </g>
+        <g fill="#BBD5F7"><path d="M118 34l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M28 82l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5z"/></g>
+      </svg>
+      <h3>ยังไม่มีสลากที่สแกนเก็บ</h3>
+      <p>สแกน QR/บาร์โค้ด บนสลากฯ จริง<br>เพื่อบันทึกสลากของคุณในบัญชี</p>
+    </div>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-item no-fill" onclick="go('home')"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1v-8z"/></svg><span>หน้าหลัก</span></button>
+    <button class="nav-item active" onclick="showTickets()"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3a2 2 0 000-4V7z"/></svg><span>สลากของฉัน</span></button>
+    <button class="nav-item" onclick="toast('ผลรางวัล')"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>ผลรางวัล</span></button>
+  </nav>
+</section>
+
+<!-- ============ SCAN ============ -->
+<section id="scan" class="screen cap-scr">
+  <video id="scan-video" autoplay playsinline muted></video>
+  <div class="scan-topbar">
+    <button class="scan-glass" onclick="stopScan();go('home')"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <h2>สแกนเก็บสลาก</h2>
+    <button class="scan-glass" id="flash-btn" onclick="toggleFlash()"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg></button>
+  </div>
+  <div class="scan-stage"><div class="frame">
+    <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+    <div class="laser"></div>
+  </div></div>
+  <div class="scan-hint">เล็งบาร์โค้ดแถบขีด (ด้านล่างสลาก) ให้เต็มกรอบ<br>ถือนิ่ง ๆ ระยะใกล้ แสงสว่างพอ ไม่มีแสงสะท้อน</div>
+  <div class="scan-foot">
+    <div class="scan-status" id="scan-status">🔍 กำลังค้นหาบาร์โค้ด…</div>
+    <button class="btn-primary" id="scan-btn" disabled onclick="afterScan()">สแกนสำเร็จ</button>
+  </div>
+</section>
+
+<!-- ============ CAPTURE FRONT ============ -->
+<section id="capfront" class="screen cap-scr">
+  <video id="front-vid" class="cap-vid" autoplay playsinline muted></video>
+  <div class="scan-topbar" style="background:linear-gradient(180deg,rgba(0,0,0,.55),transparent)">
+    <button class="scan-glass" onclick="stopCap('front');go('scan');startScan()"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <h2>ถ่ายภาพด้านหน้า</h2><div style="width:40px"></div>
+  </div>
+  <div class="cap-mask"><div class="cap-frame"></div></div>
+  <div class="cap-hint">วางสลากให้อยู่ในกรอบ เห็นเลขสลากและวันที่ชัดเจน</div>
+  <div class="cap-bar">
+    <img id="front-thumb" class="cap-thumb">
+    <button class="shutter" onclick="capture('front')"></button>
+    <button class="cap-next" id="front-next" onclick="frontDone()">ถัดไป</button>
+  </div>
+  <canvas id="front-canvas"></canvas>
+</section>
+
+<!-- ============ CAPTURE BACK ============ -->
+<section id="capback" class="screen cap-scr">
+  <video id="back-vid" class="cap-vid" autoplay playsinline muted></video>
+  <div class="scan-topbar" style="background:linear-gradient(180deg,rgba(0,0,0,.55),transparent)">
+    <button class="scan-glass" onclick="stopCap('back');go('capfront');startCap('front')"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <h2>ถ่ายภาพด้านหลัง</h2><div style="width:40px"></div>
+  </div>
+  <div class="cap-mask"><div class="cap-frame"></div></div>
+  <div class="cap-hint">พลิกสลาก วางในกรอบ ให้เห็นบาร์โค้ดด้านหลัง</div>
+  <div class="cap-bar">
+    <img id="back-thumb" class="cap-thumb">
+    <button class="shutter" onclick="capture('back')"></button>
+    <button class="cap-next" id="back-next" onclick="backDone()">ตรวจสอบ</button>
+  </div>
+  <canvas id="back-canvas"></canvas>
+</section>
+
+<!-- ============ PROCESSING ============ -->
+<section id="processing" class="screen">
+  <div class="proc">
+    <div class="proc-orb"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16 16l4 4"/></svg></div>
+    <h2>กำลังตรวจสอบสลาก</h2><div class="psub">กรุณารอสักครู่…</div>
+    <div class="psteps">
+      <div class="pstep"><div class="pdot" id="d1">1</div><span class="plabel" id="l1">อ่านบาร์โค้ด</span></div>
+      <div class="pstep"><div class="pdot" id="d2">2</div><span class="plabel" id="l2">ตรวจสอบฐานข้อมูล</span></div>
+      <div class="pstep"><div class="pdot" id="d3">3</div><span class="plabel" id="l3">OCR อ่านเลขสลากจากภาพ</span></div>
+      <div class="pstep"><div class="pdot" id="d4">4</div><span class="plabel" id="l4">AI ตรวจสอบความถูกต้อง</span></div>
+      <div class="pstep"><div class="pdot" id="d5">5</div><span class="plabel" id="l5">ตรวจสอบสถานะการขึ้นเงิน</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VERIFY ============ -->
+<section id="verify" class="screen">
+  <div class="nav-back"><button class="round-btn" onclick="resetFlow();go('home')"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><h2>ตรวจสอบข้อมูลสลาก</h2></div>
+  <div class="vscroll">
+    <div class="tcard">
+      <div class="tcard-title">สลากกินแบ่งรัฐบาล</div>
+      <div class="ticket">
+        <div class="ticket-l">
+          <div class="seal-w" id="ticket-seal"></div>
+          <div class="glo-mini">GL<em>O</em></div>
+        </div>
+        <div class="ticket-r">
+          <div class="tnum-box" id="tnum-box"></div>
+          <div class="tdate"><div class="th" id="tk-th-date">1 กรกฎาคม 2569</div><div class="en" id="tk-en-date">1 JULY 2026</div></div>
+          <div class="tmeta">งวดที่ <span class="chip" id="tk-series">26</span> ชุดที่ <span class="chip" id="tk-set">07</span></div>
+          <div class="tbar"><div class="bars"></div><div class="code" id="tk-barcode">2526074537114502-XXX</div></div>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><div class="sl">ราคา (บาท)</div><div class="sv" id="st-price">80</div></div>
+        <div class="stat"><div class="sl">เลขสลาก</div><div class="sv" id="st-num">507392</div></div>
+        <div class="stat"><div class="sl">วันที่ออกรางวัล</div><div class="sv" id="st-date">1 ก.ค. 69</div></div>
+        <div class="stat"><div class="sl">งวด/ชุด</div><div class="sv" id="st-set">26/07</div></div>
+      </div>
+    </div>
+    <div class="checks">
+      <div class="crow"><div class="cic ok" id="ck-ic"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div><div class="clabel">สถานะ</div><div class="cval ok" id="ck-status">พร้อมบันทึก</div></div>
+      <div class="crow"><div class="cic info"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9v6M10 9v6M14 9v6M17 9v6"/></svg></div><div class="clabel">บาร์โค้ดในฐานข้อมูล</div><div class="cval ok" id="ck-barcode">พบข้อมูล</div></div>
+      <div class="crow"><div class="cic info"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div><div class="clabel">เลขสลากตรงกัน (OCR)</div><div class="cval ok" id="ck-ocr">ตรงกัน</div></div>
+      <div class="crow"><div class="cic info"><svg viewBox="0 0 24 24"><path d="M12 3l2.5 5 5.5.8-4 3.9 1 5.5L12 21l-5 2.6 1-5.5-4-3.9 5.5-.8z"/></svg></div><div class="clabel">ตรวจภาพว่าเป็นสลากจริง (AI)</div><div class="cval ok" id="ck-ai">ผ่าน</div></div>
+      <div class="crow"><div class="cic info"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg></div><div class="clabel">อยู่ในระยะขึ้นเงิน (2 ปี)</div><div class="cval ok" id="ck-drawdate">ถูกต้อง</div></div>
+      <div class="crow"><div class="cic info"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0114 0"/></svg></div><div class="clabel">เจ้าของสลาก</div><div class="cval blue">ยืนยันด้วย PIN</div></div>
+      <div class="crow"><div class="cic info"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></div><div class="clabel">บัญชีผูกไว้</div><div class="cval mut">กรุงไทย •••• 4291</div></div>
+    </div>
+    <div class="v-cta">
+      <button class="btn-primary" id="save-btn" onclick="saveTicket()">บันทึกสลากเข้าบัญชี</button>
+      <button class="btn-outline" onclick="resetFlow();startScan()">สแกนใหม่</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRIZE ============ -->
+<section id="prize" class="screen">
+  <div class="top-header"><div class="brand-col" id="logo-prize"></div><button class="round-btn" onclick="showTickets()"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button></div>
+  <h2 style="text-align:center;font-size:18px;font-weight:800;color:var(--blue-deep);margin:-2px 0 4px">ผลการตรวจรางวัล</h2>
+  <div class="scroll" style="padding-bottom:88px">
+    <div class="prize-card">
+      <div class="confetti" id="confetti"></div>
+      <div class="star"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.7 1.4 6.8L12 17.8 5.9 20.5l1.4-6.8L2.2 9l6.9-.7z"/></svg></div>
+      <h2 id="prize-title">ยินดีด้วย!</h2>
+      <div class="pcong" id="prize-sub">สลากของคุณถูกรางวัลที่ 1</div>
+      <div class="prize-amt" id="prize-amt">6,000,000<small>บาท</small></div>
+    </div>
+    <div class="detail">
+      <div class="detail-h">รายละเอียดรางวัล</div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3a2 2 0 000-4V7z"/></svg></div><div class="dl">เลขสลาก</div><div class="dv" id="pd-num">507392</div></div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg></div><div class="dl">งวดวันที่</div><div class="dv ink" id="pd-date">1 ก.ค. 2569</div></div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><path d="M6 4h12v3a6 6 0 01-12 0V4zM6 6H3v1a3 3 0 003 3M18 6h3v1a3 3 0 01-3 3M9 16h6v3H9z"/></svg></div><div class="dl">ประเภทรางวัล</div><div class="dv" id="pd-type">รางวัลที่ 1</div></div>
+      <div class="drow"><div class="dic g"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></div><div class="dl">สถานะ</div><div class="dv g" id="pd-status">พร้อมขึ้นเงิน</div></div>
+    </div>
+    <button class="claim-btn" id="prize-claim-btn" onclick="go('claim')"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14h2"/></svg>ขึ้นเงินรางวัล</button>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-item no-fill" onclick="go('home')"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6h-6v6H5a1 1 0 01-1-1v-8z"/></svg><span>หน้าหลัก</span></button>
+    <button class="nav-item" onclick="showTickets()"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3a2 2 0 000-4V7z"/></svg><span>สลากของฉัน</span></button>
+    <button class="nav-item active" onclick="toast('ผลรางวัล')"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>ผลรางวัล</span></button>
+  </nav>
+</section>
+
+<!-- ============ CLAIM ============ -->
+<section id="claim" class="screen">
+  <div class="nav-back"><button class="round-btn" onclick="go('prize')"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><h2>ยืนยันรับเงินรางวัล</h2></div>
+  <div class="scroll" style="padding-bottom:30px">
+    <div class="bankcard">
+      <div class="bh">รับเงินรางวัลเข้าบัญชี</div>
+      <div class="bank-row">
+        <div class="bank-logo"><svg viewBox="0 0 24 24"><path d="M12 3c-2 3-5 4-5 7a5 5 0 0010 0c0-3-3-4-5-7z"/><path d="M8 14c1 2 3 3 4 3s3-1 4-3" fill="none" stroke="#fff" stroke-width="1.4"/></svg></div>
+        <div class="bank-info">
+          <div class="bn">ธนาคารกรุงไทย <span class="pri">บัญชีหลัก</span></div>
+          <div class="bacc">xxx-x-x4291-x</div>
+          <div class="bown">ชื่อบัญชี: นายสลาก รักโชค</div>
+        </div>
+      </div>
+    </div>
+    <div class="detail" style="margin:0 18px 16px">
+      <div class="detail-h">รายละเอียดเงินรางวัล</div>
+      <div class="drow"><div class="dl" style="flex:none;width:auto">เงินรางวัล</div><div class="dv" style="margin-left:auto" id="cl-amt">6,000,000.00 บาท</div></div>
+      <div class="drow"><div class="dl" style="flex:none">ค่าธรรมเนียม / ภาษี</div><div class="dv ink" style="margin-left:auto">ตามเงื่อนไข</div></div>
+      <div class="drow"><div class="dl" style="flex:none">ยอดรับสุทธิ</div><div class="dv" style="margin-left:auto">ตรวจสอบก่อนยืนยัน</div></div>
+    </div>
+    <div class="info-box">
+      <div class="ii"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></div>
+      <p>เพื่อความปลอดภัย คุณต้องยืนยันการรับเงินรางวัลด้วยรหัส PIN 6 หลัก<span class="mut">กรุณาตรวจสอบข้อมูลให้ถูกต้องก่อนยืนยัน</span></p>
+    </div>
+    <div class="claim-acts">
+      <button class="btn-primary" onclick="openPin()">ยืนยันรับเงินรางวัล</button>
+      <button class="btn-outline" onclick="go('prize')">ย้อนกลับ</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SUCCESS ============ -->
+<section id="success" class="screen">
+  <div class="top-header"><div class="brand-col" id="logo-success"></div></div>
+  <div class="succ-card">
+    <span class="succ-spark" style="top:40px;left:60px">✦</span><span class="succ-spark" style="top:56px;right:56px">✦</span><span class="succ-spark" style="top:96px;right:80px;font-size:11px">✦</span>
+    <div class="succ-ring"><div class="succ-core"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div></div>
+    <h2>โอนเงินรางวัลสำเร็จ</h2><div class="ssub">โอนเข้าบัญชีเรียบร้อยแล้ว</div>
+    <div class="succ-detail">
+      <div class="srow"><div class="sic"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div><div class="sl">เลขอ้างอิง</div><div class="sv" id="sc-ref">PTG-GLO-2690701</div></div>
+      <div class="srow"><div class="sic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div class="sl">เวลา</div><div class="sv" id="sc-time">09:41 น.</div></div>
+      <div class="srow"><div class="sic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></div><div class="sl">ช่องทาง</div><div class="sv">บัญชีกรุงไทย •••• 4291</div></div>
+      <div class="srow"><div class="sic g"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></div><div class="sl">สถานะ</div><div class="sv g">สำเร็จ</div></div>
+    </div>
+  </div>
+  <div class="succ-acts">
+    <button class="btn-primary" onclick="showTickets()">กลับไปสลากของฉัน</button>
+    <button class="btn-outline" onclick="go('home')">กลับหน้าหลัก</button>
+  </div>
+</section>
+
+<!-- ============ PIN OVERLAY ============ -->
+<div class="pin-ov" id="pin-ov">
+  <div class="pin-sheet">
+    <h3>ยืนยันด้วย PIN</h3><p>กรอกรหัส PIN 6 หลักเพื่อยืนยันการรับเงิน</p>
+    <div class="pin-dots" id="pin-dots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="pad">
+      <button onclick="pin('1')">1</button><button onclick="pin('2')">2</button><button onclick="pin('3')">3</button>
+      <button onclick="pin('4')">4</button><button onclick="pin('5')">5</button><button onclick="pin('6')">6</button>
+      <button onclick="pin('7')">7</button><button onclick="pin('8')">8</button><button onclick="pin('9')">9</button>
+      <button class="fn" onclick="closePin()">ยกเลิก</button><button onclick="pin('0')">0</button>
+      <button class="del" onclick="pinDel()"><svg viewBox="0 0 24 24"><path d="M20 6H9l-6 6 6 6h11a1 1 0 001-1V7a1 1 0 00-1-1zM17 9l-5 6M12 9l5 6"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
