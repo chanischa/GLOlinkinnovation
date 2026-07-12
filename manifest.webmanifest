@@ -1,0 +1,19 @@
+{
+  "name": "GLO Ticket Verifier",
+  "short_name": "Ticket Verify",
+  "description": "Mobile ticket verification prototype with barcode, OCR, and image authenticity checks.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EAF3FE",
+  "theme_color": "#1B62D6",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

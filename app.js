@@ -80,7 +80,7 @@ const SEED = {
   "69-25-01-127911-3943":{barcode:"69-25-01-127911-3943",alt:"",number:"127911",draw_date:"1 ก.ค. 2569",draw_en:"1 JULY 2026",series:"25",set:"01",price:80,status:"active",is_claimed:false,prize_type:"เลขหน้า 3 ตัว",prize_amount:4000},
   "69-26-12-965884-4359":{barcode:"69-26-12-965884-4359",alt:"2626120397183002",number:"965884",draw_date:"1 ก.ค. 2569",draw_en:"1 JULY 2026",series:"26",set:"12",price:80,status:"active",is_claimed:false,prize_type:null,prize_amount:0},
   "69-26-37-453545-1478":{barcode:"69-26-37-453545-1478",alt:"2626377603136304",number:"453545",draw_date:"1 ก.ค. 2569",draw_en:"1 JULY 2026",series:"26",set:"37",price:80,status:"active",is_claimed:false,prize_type:"เลขท้าย 3 ตัว",prize_amount:4000},
-  "69-26-01-357788-0105":{barcode:"69-26-01-357788-0105",alt:"2626013734295003",number:"357788",draw_date:"1 ก.ค. 2569",draw_en:"1 JULY 2026",series:"26",set:"01",price:100,status:"active",is_claimed:false,prize_type:null,prize_amount:0},
+  "69-26-01-357788-0105":{barcode:"69-26-01-357788-0105",alt:"2626013734295003",number:"357788",draw_date:"1 ก.ค. 2569",draw_en:"1 JULY 2026",series:"26",set:"01",price:100,status:"active",is_claimed:false,prize_type:null,prize_amount:0,owner_id:"0898887777"},
   "69-26-38-453545-1478":{barcode:"69-26-38-453545-1478",alt:"2626385377053407",number:"453545",draw_date:"1 ก.ค. 2569",draw_en:"1 JULY 2026",series:"26",set:"38",price:80,status:"active",is_claimed:false,prize_type:"เลขท้าย 3 ตัว",prize_amount:4000},
   "69-26-38-488807-7121":{barcode:"69-26-38-488807-7121",alt:"2626381252251504",number:"488807",draw_date:"1 ก.ค. 2569",draw_en:"1 JULY 2026",series:"26",set:"38",price:80,status:"active",is_claimed:false,prize_type:"เลขท้าย 3 ตัว",prize_amount:4000},
   "69-26-13-965884-4359":{barcode:"69-26-13-965884-4359",alt:"2626133850280207",number:"965884",draw_date:"1 ก.ค. 2569",draw_en:"1 JULY 2026",series:"26",set:"13",price:80,status:"active",is_claimed:false,prize_type:null,prize_amount:0},
@@ -119,7 +119,53 @@ async function apiPost(path,body){
 
 /* ---------- state ---------- */
 const S = {barcode:null,ticket:null,frontImg:null,backImg:null,ocr:null,pin:'',
-  streams:{scan:null,front:null,back:null}, loop:null, flash:false, saved:[]};
+  userId:localStorage.getItem('glo_user_id') || '0812345678',          // the logged-in demo user
+  mode:'collect',               // 'verify' = check only · 'collect' = take ownership
+  streams:{scan:null,front:null,back:null}, loop:null, flash:false, saved:[],
+  scanCanContinue:false, scanValidation:null, collectBusy:false};
+
+// mask a phone/id for display, e.g. 0898887777 -> 08x-xxx-7777
+function maskUserJS(id){const s=String(id); return s.length>=7? s.slice(0,2)+'x-xxx-'+s.slice(-4) : s.slice(0,2)+'***';}
+
+// Capture the device location (used to stamp scan / collect / claim actions).
+function getLocation(){
+  return new Promise(res=>{
+    if(!navigator.geolocation){res(null);return;}
+    navigator.geolocation.getCurrentPosition(
+      p=>res({lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6), acc:Math.round(p.coords.accuracy||0)}),
+      ()=>res(null),
+      {enableHighAccuracy:true, timeout:8000, maximumAge:60000});
+  });
+}
+function geoBody(extra){ return Object.assign({lat:S.geo?S.geo.lat:null, lng:S.geo?S.geo.lng:null}, extra||{}); }
+
+async function apiOwnershipValidate(barcode){
+  if(API_BASE || location.protocol.startsWith('http')){
+    try{
+      const r=await fetch(`${API_BASE}/api/ownership/validate`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({barcode,user_id:S.userId})
+      });
+      const data=await r.json();
+      return {ok:r.ok,...data};
+    }catch(e){}
+  }
+  const t=seedLookup(barcode);
+  if(!t) return {ok:false,status:'not_found'};
+  if(!t.owner_id) return {ok:false,status:'ownership_required',ticket:t};
+  if(String(t.owner_id)!==String(S.userId)) return {ok:false,status:'ownership_conflict',owner_mask:maskUserJS(t.owner_id),ticket:t};
+  return {ok:true,status:'owner_confirmed',ticket:t};
+}
+
+function ownerStatusText(status, ownerMask){
+  if(status==='owner_confirmed') return 'ยืนยันเจ้าของสิทธิ์แล้ว';
+  if(status==='ownership_required') return 'ต้องเก็บสิทธิ์สลากก่อน';
+  if(status==='ownership_conflict') return 'สลากเป็นของบัญชีอื่น'+(ownerMask?' ('+ownerMask+')':'');
+  if(status==='already_yours') return 'สลากนี้อยู่ในบัญชีคุณแล้ว';
+  if(status==='duplicate_number_collected') return 'เลขสลากนี้ถูกเก็บเข้าบัญชีคุณแล้ว';
+  return 'ตรวจเจ้าของสิทธิ์ไม่ผ่าน';
+}
 
 /* ---------- navigation ---------- */
 function go(id){
@@ -133,20 +179,100 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 
 /* ---------- SCAN — native BarcodeDetector, ZXing fallback ---------- */
 let zxingReader=null;
-function onDetect(raw){
+function scannedNumberFromCodeJS(code){
+  const c=String(code||'').trim();
+  const payload=c.match(/(?:^|\D)(\d{2})-\d{2}-\d{2}-(\d{6})-\d{4}(?:\D|$)/);
+  if(payload) return payload[2];
+  const isolated=c.match(/(?:^|\D)(\d{6})(?:\D|$)/);
+  if(isolated) return isolated[1];
+  const digits=c.replace(/\D/g,'');
+  return digits.length===6?digits:null;
+}
+function parsedDataMatrixCodeJS(code){
+  const c=String(code||'').trim();
+  const payload=c.match(/(?:^|\D)(\d{2})-(\d{2})-(\d{2})-(\d{6})-(\d{4})(?:\D|$)/);
+  return payload?{year:payload[1],series:payload[2],set:payload[3],number:payload[4],suffix:payload[5]}:null;
+}
+function signatureSeedLookup(code){
+  const parsed=parsedDataMatrixCodeJS(code);
+  if(!parsed) return null;
+  const prefix=`${parsed.year}-${parsed.series}-${parsed.set}-`;
+  const suffix=`-${parsed.suffix}`;
+  for(const k in SEED){
+    if(k.startsWith(prefix) && k.endsWith(suffix)) return SEED[k];
+  }
+  return null;
+}
+async function validateScannedCode(code){
+  if(API_BASE || location.protocol.startsWith('http')){
+    try{
+      const r=await fetch(`${API_BASE}/api/scan-validate`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({barcode:code,mode:S.mode,user_id:S.userId})
+      });
+      return await r.json();
+    }catch(e){}
+  }
+  const signatureTicket=signatureSeedLookup(code);
+  const ticket=signatureTicket || seedLookup(code);
+  const scanned_number=scannedNumberFromCodeJS(code);
+  const reasons=[];
+  if(!ticket) reasons.push('barcode_not_found');
+  if(ticket && scanned_number && scanned_number!==ticket.number) reasons.push('barcode_number_mismatch');
+  if(ticket && S.mode==='collect' && !scanned_number) reasons.push('scan_number_unavailable');
+  if(ticket && S.mode==='collect' && ticket.owner_id) reasons.push(String(ticket.owner_id)===S.userId?'already_collected_by_you':'already_collected_by_other');
+  if(ticket && S.mode==='collect' && S.saved.some(t=>t.barcode===ticket.barcode || t.number===ticket.number)) reasons.push('duplicate_number_collected');
+  return {ok:reasons.length===0,reasons,scanned_number,parsed_payload:parsedDataMatrixCodeJS(code),lookup_method:signatureTicket?'signature':ticket?'fallback':'none',number_match:!!ticket&&(!scanned_number||scanned_number===ticket.number),already_collected:!!(ticket&&ticket.owner_id),owner_mask:ticket&&ticket.owner_id?maskUserJS(ticket.owner_id):null,ticket};
+}
+function scanReasonText(validation){
+  const reasons=(validation&&validation.reasons)||[];
+  if(reasons.includes('barcode_number_mismatch')) return 'เลขในโค้ดไม่ตรงกับฐานข้อมูล';
+  if(reasons.includes('already_collected_by_you')) return 'สลากนี้ถูกเก็บเข้าบัญชีคุณแล้ว';
+  if(reasons.includes('duplicate_number_collected')) return 'เลขสลากนี้ถูกเก็บเข้าบัญชีคุณแล้ว';
+  if(reasons.includes('already_collected_by_other')) return 'สลากนี้ถูกเก็บสิทธิ์โดยบัญชีอื่นแล้ว';
+  if(reasons.includes('already_claimed')) return 'สลากนี้ขึ้นเงินแล้ว';
+  if(reasons.includes('claim_window_closed')) return 'สลากนี้หมดระยะขึ้นเงินแล้ว';
+  if(reasons.includes('barcode_not_found')) return 'ไม่พบรหัสสลากในฐานข้อมูล';
+  return 'รหัสสลากไม่ผ่านการตรวจสอบ';
+}
+async function onDetect(raw){
   if(S.barcode) return;                                  // ignore repeats
   const code = String(raw).trim();
   if(/^https?:\/\//i.test(code)) return;                 // ignore the distributor QR link, keep scanning
   S.barcode = code;                                      // keep the full Data Matrix / barcode payload
+  S.scanCanContinue=false; S.scanValidation=null;
   const st=document.getElementById('scan-status'), btn=document.getElementById('scan-btn');
   const shown = code.length>26 ? code.slice(0,26)+'…' : code;
   st.textContent='✅ พบรหัสสลาก: '+shown; btn.disabled=false;
+  btn.disabled=true;
+  st.textContent='พบรหัสสลาก: '+shown+' · กำลังตรวจเลขกับฐานข้อมูล...';
   try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){}
   stopScan();                                            // stop the camera loop once found
+  const validation=await validateScannedCode(code);
+  S.scanValidation=validation;
+  S.ticket=validation.ticket||null;
+  if(validation.ok){
+    S.scanCanContinue=true;
+    const dbNum=validation.ticket&&validation.ticket.number?validation.ticket.number:'';
+    const scannedNum=validation.scanned_number?` · เลขในโค้ด ${validation.scanned_number}`:'';
+    st.textContent='ผ่าน: พบรหัสในฐานข้อมูล'+(dbNum?` · เลขสลาก ${dbNum}`:'')+scannedNum;
+    btn.textContent=S.mode==='verify'?'ถ่ายภาพตรวจสลากจริง':'ถ่ายภาพเพื่อเก็บสิทธิ์';
+    btn.disabled=false;
+  }else{
+    st.textContent='ไม่ผ่าน: '+scanReasonText(validation);
+    btn.textContent='สแกนใหม่';
+    btn.disabled=false;
+  }
 }
-async function startScan(){
+async function startScan(mode){
+  S.mode = mode==='verify' ? 'verify' : 'collect';
   go('scan');
+  const tt=document.getElementById('scan-title'); if(tt) tt.textContent = S.mode==='verify' ? 'ตรวจสอบสลาก' : 'สแกนเก็บสลาก';
+  // capture location in the background (non-blocking) so it's ready by collect time
+  getLocation().then(g=>{ S.geo=g; if(g) toast('📍 บันทึกตำแหน่งการสแกนแล้ว'); });
   const v=document.getElementById('scan-video'),st=document.getElementById('scan-status'),btn=document.getElementById('scan-btn');
+  btn.textContent='สแกนสำเร็จ'; S.scanCanContinue=false; S.scanValidation=null;
   btn.disabled=true; S.barcode=null; st.textContent='📷 กำลังเปิดกล้อง…';
   try{
     S.streams.scan=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080},focusMode:'continuous'}});
@@ -201,7 +327,14 @@ function toggleFlash(){
   S.flash=!S.flash;
   try{tr.applyConstraints({advanced:[{torch:S.flash}]});document.getElementById('flash-btn').classList.toggle('flash',S.flash);}catch(e){toast('อุปกรณ์นี้ไม่รองรับแฟลช');}
 }
-function afterScan(){ stopScan(); go('capfront'); startCap('front'); }
+function afterScan(){
+  if(!S.scanCanContinue){
+    S.barcode=null;
+    startScan(S.mode);
+    return;
+  }
+  stopScan(); go('capfront'); startCap('front');
+}
 
 /* ---------- CAPTURE ---------- */
 async function startCap(side){
@@ -237,21 +370,23 @@ async function runVerify(){
   step(1,'act'); await sleep(650); step(1,'done');
 
   step(2,'act'); await sleep(850);
-  ticket=await apiLookup(S.barcode);
+  ticket=S.ticket || await apiLookup(S.barcode);
   if(!ticket) ticket={barcode:S.barcode,number:'??????',draw_date:'—',series:'—',set:'—',price:80,status:'invalid',is_claimed:false,prize_type:null,prize_amount:0};
   S.ticket=ticket; step(2,'done');
 
-  // ---- (A) STRICT OCR: read the printed number; unreadable real photo = not a pass ----
+  // OCR is required: the printed number in the photo must match the scanned ticket.
   step(3,'act');
   S.ocr = await runOCR(S.frontImg, ticket, S.frontPlaceholder);
   ocrReadable = S.frontPlaceholder ? true : (S.ocr!=null);
-  if(ticket.number!=='??????' && S.ocr) ocrMatch = (S.ocr===ticket.number);
+  ocrMatch = ticket.status !== 'invalid' && ticket.number!=='??????' && S.ocr === ticket.number;
   await sleep(300); step(3,'done');
 
   // ---- (B) IMAGE AUTHENTICITY: real pixel analysis for screenshot/photocopy signals ----
   step(4,'act');
-  const analysis = await analyzeImage(S.frontImg, S.frontPlaceholder);
+  const localAnalysis = await analyzeImage(S.frontImg, S.frontPlaceholder);
+  const analysis = await verifyImageWithServer(S.frontImg, localAnalysis);
   S.aiScore = analysis.score; S.aiReason = analysis.reason; S.aiScreenshot = analysis.screenshot;
+  S.visionChecklist = analysis.checklist || [];
   dateOK = !isExpired(ticket);   // claimable within 2 years of the draw date
   await sleep(500); step(4,'done');
 
@@ -312,6 +447,35 @@ function analyzeImage(dataURL, isPlaceholder){
   });
 }
 
+async function verifyImageWithServer(dataURL, localAnalysis){
+  if(!dataURL || !(API_BASE || location.protocol.startsWith('http'))) return localAnalysis;
+  try{
+    const r = await fetch(`${API_BASE}/api/verify-image`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        front_b64:dataURL,
+        client_score:localAnalysis.score,
+        client_metrics:localAnalysis.metrics || {}
+      })
+    });
+    if(!r.ok) return localAnalysis;
+    const out = await r.json();
+    const score = Math.round(Number(out.ai_score == null ? localAnalysis.score / 100 : out.ai_score) * 100);
+    const flagged = (out.checklist || []).filter(c=>c.status==='suspicious').map(c=>c.dimension);
+    return {
+      score,
+      screenshot: !!out.is_screenshot || !!out.suspicious,
+      reason: flagged.length ? `server checklist: ${flagged.join(', ')}` : localAnalysis.reason,
+      metrics: localAnalysis.metrics || {},
+      checklist: out.checklist || [],
+      source: out.source || 'server'
+    };
+  }catch(e){
+    return localAnalysis;
+  }
+}
+
 // Upscale + grayscale + contrast-stretch the photo so Tesseract can read the digits.
 function preprocess(dataURL){
   return new Promise(resolve=>{
@@ -336,6 +500,48 @@ function preprocess(dataURL){
   });
 }
 
+function preprocessRegion(dataURL, crop, mode){
+  return new Promise(resolve=>{
+    const im=new Image();
+    im.onload=()=>{
+      const sx=crop?Math.max(0,Math.round(im.width*crop.x)):0;
+      const sy=crop?Math.max(0,Math.round(im.height*crop.y)):0;
+      const sw=crop?Math.min(im.width-sx,Math.round(im.width*crop.w)):im.width;
+      const sh=crop?Math.min(im.height-sy,Math.round(im.height*crop.h)):im.height;
+      const targetW=mode==='line'?1800:1600;
+      const scale=Math.min(4, Math.max(1.4, targetW/Math.max(1,sw)));
+      const pad=36;
+      const c=document.createElement('canvas');
+      c.width=Math.round(sw*scale)+pad*2;
+      c.height=Math.round(sh*scale)+pad*2;
+      const x=c.getContext('2d');
+      x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height);
+      x.imageSmoothingEnabled=true;
+      x.imageSmoothingQuality='high';
+      x.drawImage(im,sx,sy,sw,sh,pad,pad,Math.round(sw*scale),Math.round(sh*scale));
+      const d=x.getImageData(0,0,c.width,c.height), p=d.data;
+      let min=255,max=0;
+      for(let i=0;i<p.length;i+=4){
+        const g=(0.299*p[i]+0.587*p[i+1]+0.114*p[i+2])|0;
+        p[i]=p[i+1]=p[i+2]=g;
+        if(g<min)min=g;if(g>max)max=g;
+      }
+      const range=Math.max(1,max-min);
+      for(let i=0;i<p.length;i+=4){
+        const stretched=((p[i]-min)/range)*255;
+        const v=mode==='line'
+          ? (stretched<120?0:stretched>188?255:stretched)
+          : (stretched<100?0:stretched>176?255:stretched);
+        p[i]=p[i+1]=p[i+2]=v;
+      }
+      x.putImageData(d,0,0);
+      resolve(c.toDataURL('image/png'));
+    };
+    im.onerror=()=>resolve(dataURL);
+    im.src=dataURL;
+  });
+}
+
 // Extract the 6-digit lottery number: prefer an isolated 6-digit group
 // (so the 16-digit barcode and 4-digit year are ignored). No lookbehind
 // so it parses in every browser including older Safari.
@@ -349,26 +555,71 @@ function extractNumber(text){
   return null;
 }
 
+function extractNumberCandidates(text){
+  const groups=(text.match(/\d+/g)||[]);
+  const out=[];
+  for(const g of groups){
+    if(g.length===6) out.push(g);
+    else if(g.length>6 && g.length<=18){
+      for(let i=0;i<=g.length-6;i++) out.push(g.slice(i,i+6));
+    }
+  }
+  return [...new Set(out)];
+}
+
 async function runOCR(img,ticket,isPlaceholder){
   // Demo placeholder (no real camera): trust the ticket number so the flow is testable.
   if(isPlaceholder) return ticket && ticket.number!=='??????' ? ticket.number : null;
   // Real photo: read it for real. If we can't read a 6-digit number → return null
   // (STRICT: an unreadable photo must NOT silently pass as a match).
   if(img && typeof Tesseract!=='undefined'){
+    const expected=ticket&&ticket.number&&ticket.number!=='??????'?String(ticket.number):null;
+    const variants=[
+      {name:'main_number_top_right',crop:{x:.42,y:.08,w:.55,h:.24},psm:'7',mode:'line'},
+      {name:'main_number_upper_band',crop:{x:.30,y:.04,w:.68,h:.34},psm:'6',mode:'line'},
+      {name:'ticket_middle',crop:{x:.08,y:.10,w:.86,h:.52},psm:'6',mode:'block'},
+      {name:'full_frame',crop:null,psm:'6',mode:'block'}
+    ];
+    const allCandidates=[];
+    let bestConfidence=0;
     try{
-      const pre=await preprocess(img);
       const w=await Tesseract.createWorker('eng');
-      await w.setParameters({
-        tessedit_char_whitelist:'0123456789',
-        tessedit_pageseg_mode:'6',
-        preserve_interword_spaces:'1'
-      });
-      const {data}=await w.recognize(pre);
+      for(const v of variants){
+        const pre=await preprocessRegion(img,v.crop,v.mode);
+        await w.setParameters({
+          tessedit_char_whitelist:'0123456789',
+          tessedit_pageseg_mode:v.psm,
+          preserve_interword_spaces:'1'
+        });
+        const {data}=await w.recognize(pre);
+        const confidence=Math.round((data&&data.confidence)||0);
+        if(confidence>bestConfidence) bestConfidence=confidence;
+        const text=data.text||'';
+        const candidates=extractNumberCandidates(text);
+        for(const value of candidates) allCandidates.push({value,confidence,source:v.name});
+        if(expected && candidates.includes(expected)){
+          await w.terminate();
+          S.ocrConfidence=confidence;
+          S.ocrSource=v.name;
+          S.ocrCandidates=candidates;
+          return expected;
+        }
+        if(candidates.length && confidence>=35){
+          await w.terminate();
+          S.ocrConfidence=confidence;
+          S.ocrSource=v.name;
+          S.ocrCandidates=candidates;
+          return candidates[0];
+        }
+      }
       await w.terminate();
-      const found=extractNumber(data.text||'');
-      S.ocrConfidence=Math.round((data&&data.confidence)||0);
-      if(found && S.ocrConfidence>=45) return found;   // confident read
-      if(found) return found;                            // low-confidence but got 6 digits
+      S.ocrConfidence=bestConfidence;
+      S.ocrCandidates=allCandidates.map(c=>c.value);
+      if(allCandidates.length){
+        allCandidates.sort((a,b)=>b.confidence-a.confidence);
+        S.ocrSource=allCandidates[0].source;
+        return allCandidates[0].value;
+      }
     }catch(e){ console.warn('OCR error',e); }
   }
   return null;   // unreadable
@@ -397,7 +648,7 @@ function renderVerify(t,ocrMatch,dateOK,ocrReadable){
   const imgBad = S.aiScreenshot || (S.aiScore!=null && S.aiScore<55);
   if(!barcodeOK){outcome='bad';statusText='ไม่พบสลากในระบบ';}
   else if(t.is_claimed){outcome='warn';statusText='ขึ้นเงินรางวัลแล้ว';}
-  else if(!ocrReadable){outcome='review';statusText='ภาพไม่ชัด ถ่ายใหม่';}   // (A) strict OCR
+  else if(!ocrReadable){outcome='review';statusText='ภาพไม่ชัด ถ่ายใหม่';}
   else if(!ocrMatch){outcome='bad';statusText='เลขสลากไม่ตรงกัน';}
   else if(imgBad){outcome='bad';statusText='ภาพอาจไม่ใช่สลากจริง';}          // (B) image authenticity
   else if(!dateOK){outcome='bad';statusText='เกินระยะขึ้นเงิน (2 ปี)';}
@@ -410,9 +661,8 @@ function renderVerify(t,ocrMatch,dateOK,ocrReadable){
     : tone==='warn'?'<svg viewBox="0 0 24 24"><path d="M12 3l9 16H3zM12 9v5M12 17h.01"/></svg>'
     : '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>';
   set('ck-barcode', barcodeOK?'พบข้อมูล':'ไม่พบข้อมูล', barcodeOK?'ok':'bad');
-  // (A) OCR row — now distinguishes match / mismatch / unreadable
   if(!ocrReadable) set('ck-ocr','อ่านเลขไม่ได้ — ถ่ายใหม่','warn');
-  else set('ck-ocr', ocrMatch?('ตรงกัน ('+(S.ocr||num)+')'):('ไม่ตรง '+(S.ocr||'—')+'≠'+num), ocrMatch?'ok':'bad');
+  else set('ck-ocr', ocrMatch?('ยืนยันจากบาร์โค้ด ('+(S.ocr||num)+')'):('ไม่พบเลขในฐานข้อมูล'), ocrMatch?'ok':'bad');
   // (B) AI image-authenticity row
   if(S.aiScore!=null){
     const good=!imgBad;
@@ -420,20 +670,101 @@ function renderVerify(t,ocrMatch,dateOK,ocrReadable){
   }
   set('ck-drawdate', dateOK?('ขึ้นเงินได้ถึง '+deadlineText(t)):'เกิน 2 ปี หมดสิทธิ์', dateOK?'ok':'bad');
 
+  // ownership status
+  const owner=t.owner_id||null;
+  const conflict = owner && String(owner)!==S.userId;
+  if(!owner) set('ck-owner','ยังไม่ถูกเก็บสิทธิ์','ok');
+  else if(String(owner)===S.userId) set('ck-owner','สลากของคุณ','ok');
+  else set('ck-owner','ถูกเก็บสิทธิ์แล้ว ('+(t.owner_mask||maskUserJS(owner))+')','bad');
+
   const save=document.getElementById('save-btn');
-  const blocked = (outcome==='bad'||outcome==='review'||t.is_claimed);
+  let blocked = (outcome==='bad'||outcome==='review'||t.is_claimed);
+  if(S.mode==='collect' && conflict) blocked=true;              // can't collect someone else's ticket
   if(blocked){save.style.opacity=.5;save.style.pointerEvents='none';
-    save.textContent = t.is_claimed?'สลากนี้ขึ้นเงินแล้ว' : outcome==='review'?'ถ่ายภาพใหม่ให้ชัดขึ้น' : 'ไม่สามารถบันทึกได้';}
-  else{save.style.opacity=1;save.style.pointerEvents='all';save.textContent='บันทึกสลากเข้าบัญชี';}
+    save.textContent = t.is_claimed?'สลากนี้ขึ้นเงินแล้ว'
+      : (S.mode==='collect'&&conflict)?'สลากถูกเก็บสิทธิ์โดยผู้อื่น'
+      : outcome==='review'?'ถ่ายภาพใหม่ให้ชัดขึ้น' : 'ไม่สามารถบันทึกได้';}
+  else{save.style.opacity=1;save.style.pointerEvents='all';
+    save.textContent = S.mode==='verify' ? 'ดูผลการตรวจรางวัล' : 'เก็บสิทธิ์เข้าบัญชี';}
   go('verify');
 }
 function set(id,txt,cls){const e=document.getElementById(id);e.textContent=txt;e.className='cval '+(cls||'');}
 
-/* ---------- SAVE + PRIZE ---------- */
-async function saveTicket(){
+/* ---------- SCAN MODE ACTIONS ---------- */
+// Primary button on the verify screen. Verify mode = show result only (no ownership).
+// Collect mode = register ownership first, then show the prize.
+function onPrimary(){ if(S.mode==='verify') showPrize(false); else onCollect(); }
+
+// SCAN MODE 2: take ownership. Handles the ownership-conflict case.
+async function onCollect(){
+  const t=S.ticket; if(!t) return;
+  if(S.collectBusy) return;
+  const save=document.getElementById('save-btn');
+  const localDuplicate = S.saved.some(x=>x.barcode===t.barcode || x.number===t.number);
+  if(localDuplicate || (t.owner_id && String(t.owner_id)===S.userId)){
+    set('ck-owner','สลาก/เลขนี้ถูกเก็บเข้าบัญชีคุณแล้ว','bad');
+    set('ck-status','ไม่สามารถเก็บซ้ำได้','warn');
+    if(save){ save.style.opacity=.5; save.style.pointerEvents='none'; save.textContent='สลาก/เลขนี้ถูกเก็บแล้ว'; }
+    toast('ไม่สามารถเก็บซ้ำได้');
+    return;
+  }
+  S.collectBusy=true;
+  if(save){ save.style.opacity=.55; save.style.pointerEvents='none'; save.textContent='กำลังเก็บสิทธิ์...'; }
+  const ownerCheck=await apiOwnershipValidate(t.barcode);
+  if(ownerCheck.ok || ownerCheck.status==='already_yours'){
+    set('ck-owner','สลากนี้อยู่ในบัญชีคุณแล้ว','bad');
+    set('ck-status','ไม่สามารถเก็บซ้ำได้','warn');
+    if(save){ save.style.opacity=.5; save.style.pointerEvents='none'; save.textContent='สลากนี้ถูกเก็บแล้ว'; }
+    toast('สลากนี้อยู่ในบัญชีคุณแล้ว');
+    S.collectBusy=false;
+    return;
+  }
+  if(ownerCheck.status==='ownership_conflict'){
+    set('ck-owner',ownerStatusText(ownerCheck.status, ownerCheck.owner_mask),'bad');
+    set('ck-status','เจ้าของสิทธิ์ไม่ตรงกัน','warn');
+    if(save){ save.style.opacity=.5; save.style.pointerEvents='none'; save.textContent='บัญชีนี้เก็บไม่ได้'; }
+    toast('บัญชีนี้ไม่ใช่เจ้าของสลาก');
+    S.collectBusy=false;
+    return;
+  }
+  let resp=null;
+  if(API_BASE || location.protocol.startsWith('http')){
+    try{ const r=await fetch(`${API_BASE}/api/ownership`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(geoBody({barcode:t.barcode,user_id:S.userId}))});
+      resp=await r.json(); }catch(e){}
+  }
+  if(!resp){ // offline fallback
+    if(t.owner_id && String(t.owner_id)!==S.userId) resp={status:'ownership_conflict',owner_mask:maskUserJS(t.owner_id)};
+    else { t.owner_id=S.userId; resp={status:'registered'}; }
+  }
+  if(resp.status==='already_yours' || resp.status==='duplicate_number_collected'){
+    set('ck-owner', resp.status==='duplicate_number_collected'?'เลขสลากนี้ถูกเก็บเข้าบัญชีคุณแล้ว':'สลากนี้อยู่ในบัญชีคุณแล้ว','bad');
+    set('ck-status','ไม่สามารถเก็บซ้ำได้','warn');
+    const s=document.getElementById('save-btn'); s.style.opacity=.5; s.style.pointerEvents='none'; s.textContent='สลาก/เลขนี้ถูกเก็บแล้ว';
+    toast('ไม่สามารถเก็บซ้ำได้'); S.collectBusy=false; return;
+  }
+  if(resp.status==='ownership_conflict'){
+    set('ck-owner','⚠️ ถูกเก็บสิทธิ์โดย '+(resp.owner_mask||'บัญชีอื่น'),'bad');
+    set('ck-status','สิทธิ์ซ้ำ — ส่งตรวจสอบ (review)','warn');
+    const s=document.getElementById('save-btn'); s.style.opacity=.5; s.style.pointerEvents='none'; s.textContent='สลากถูกเก็บสิทธิ์แล้ว';
+    toast('❌ สลากนี้ถูกเก็บสิทธิ์โดยบัญชีอื่นแล้ว'); S.collectBusy=false; return;
+  }
+  if(resp.ticket) S.ticket={...t,...resp.ticket};
+  else S.ticket={...t,owner_id:S.userId};
+  toast(resp.status==='already_yours'?'สลากนี้อยู่ในบัญชีคุณแล้ว':'เก็บสิทธิ์เข้าบัญชีสำเร็จ ✓');
+  await showPrize(true);
+  S.collectBusy=false;
+}
+
+/* ---------- PRIZE ---------- */
+function saveTicket(){ showPrize(true); }          // back-compat
+async function showPrize(register){
   const t=S.ticket; if(!t)return;
-  await apiPost('/api/scans',{barcode:t.barcode,action_type:'verify',ocr_result:S.ocr,result_status:'ok'});
-  S.saved.unshift({...t,savedAt:new Date().toLocaleDateString('th-TH')});
+  if(register){
+    await apiPost('/api/scans',geoBody({barcode:t.barcode,user_id:S.userId,action_type:'collect',ocr_result:S.ocr,result_status:'ok'}));
+    if(!S.saved.some(x=>x.barcode===t.barcode || x.number===t.number)){
+      S.saved.unshift({...t,owner_id:t.owner_id||S.userId,savedAt:new Date().toLocaleDateString('th-TH'),geo:S.geo});
+    }
+  }
   const win=t.prize_type&&t.prize_amount>0;
   document.getElementById('prize-title').textContent=win?'ยินดีด้วย!':'ตรวจผลรางวัลแล้ว';
   document.getElementById('prize-sub').textContent=win?('สลากของคุณถูก'+t.prize_type):'สลากของคุณไม่ถูกรางวัลในงวดนี้';
@@ -444,7 +775,8 @@ async function saveTicket(){
   document.getElementById('pd-status').textContent=win?'พร้อมขึ้นเงิน':'ไม่ถูกรางวัล';
   document.getElementById('pd-status').className='dv '+(win?'g':'ink');
   document.getElementById('cl-amt').textContent=(win?t.prize_amount.toLocaleString('th-TH'):'0')+'.00 บาท';
-  document.getElementById('prize-claim-btn').style.display=win?'flex':'none';
+  const canClaim = win && t.owner_id && String(t.owner_id)===String(S.userId);
+  document.getElementById('prize-claim-btn').style.display=canClaim?'flex':'none';
   makeConfetti(win);
   renderSaved();
   go('prize');
@@ -456,6 +788,20 @@ function makeConfetti(win){
 }
 
 /* ---------- PIN + SUCCESS ---------- */
+async function beginClaim(){
+  const t=S.ticket; if(!t) return;
+  const validation=await apiOwnershipValidate(t.barcode);
+  if(!validation.ok){
+    toast(ownerStatusText(validation.status, validation.owner_mask));
+    if(validation.status==='ownership_required'){
+      go('verify');
+      set('ck-owner','ต้องเก็บสิทธิ์สลากก่อนขึ้นเงิน','warn');
+      set('ck-status','ยังไม่ได้ยืนยันเจ้าของสิทธิ์','warn');
+    }
+    return;
+  }
+  openPin();
+}
 function openPin(){S.pin='';drawPin();document.getElementById('pin-ov').classList.add('show');}
 function closePin(){document.getElementById('pin-ov').classList.remove('show');S.pin='';drawPin();}
 function pin(d){if(S.pin.length>=6)return;S.pin+=d;drawPin();if(S.pin.length===6)setTimeout(()=>{closePin();finishClaim();},260);}
@@ -463,11 +809,17 @@ function pinDel(){S.pin=S.pin.slice(0,-1);drawPin();}
 function drawPin(){document.querySelectorAll('#pin-dots i').forEach((el,i)=>el.classList.toggle('on',i<S.pin.length));}
 async function finishClaim(){
   const t=S.ticket;
+  const validation=await apiOwnershipValidate(t.barcode);
+  if(!validation.ok){
+    toast(ownerStatusText(validation.status, validation.owner_mask));
+    return;
+  }
   const now=new Date();
   const ref='PTG-GLO-'+String(now.getFullYear()+543).slice(2)+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
   document.getElementById('sc-ref').textContent=ref;
   document.getElementById('sc-time').textContent=now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})+' น.';
-  await apiPost('/api/claims',{barcode:t.barcode,amount:t.prize_amount,bank:'กรุงไทย',ref});
+  document.getElementById('sc-geo').textContent = S.geo ? (S.geo.lat.toFixed(4)+', '+S.geo.lng.toFixed(4)+' (±'+S.geo.acc+'ม.)') : 'ไม่ได้อนุญาตตำแหน่ง';
+  await apiPost('/api/claims',geoBody({barcode:t.barcode,user_id:S.userId,amount:t.prize_amount,bank:'กรุงไทย',ref}));
   if(t) t.is_claimed=true;
   go('success');
 }
@@ -488,5 +840,71 @@ function resetFlow(){S.barcode=null;S.frontImg=null;S.backImg=null;S.ocr=null;
   ['front','back'].forEach(s=>{document.getElementById(s+'-thumb').style.display='none';document.getElementById(s+'-next').classList.remove('on');});}
 
 /* ---------- boot ---------- */
+function setUser(id){
+  S.userId=String(id);
+  localStorage.setItem('glo_user_id',S.userId);
+  S.saved=[];
+  renderSaved();
+  const label=document.getElementById('active-user-label');
+  if(label) label.textContent='User '+S.userId;
+  toast('เปลี่ยนผู้ใช้เป็น '+S.userId);
+}
+function applyUserSwitcher(){
+  const host=document.querySelector('#home .top-header');
+  if(!host || document.getElementById('user-switcher')) return;
+  const wrap=document.createElement('div');
+  wrap.id='user-switcher';
+  wrap.style.cssText='display:flex;flex-direction:column;align-items:flex-end;gap:5px;font-size:11px;color:#6B7A99;font-weight:700';
+  wrap.innerHTML=`<div id="active-user-label">User ${S.userId}</div>
+    <select aria-label="Demo user" style="border:1px solid #DCEAFD;border-radius:10px;padding:6px 8px;background:#fff;color:#1A2B4A;font-weight:700">
+      <option value="0812345678">User A</option>
+      <option value="0898887777">User B</option>
+      <option value="0900000000">User C</option>
+    </select>`;
+  const select=wrap.querySelector('select');
+  select.value=S.userId;
+  select.onchange=()=>setUser(select.value);
+  host.appendChild(wrap);
+}
+function applyVerificationCopy(){
+  const l3=document.getElementById('l3');
+  if(l3) l3.textContent='อ่านเลขจากภาพ (OCR)';
+  const ck=document.getElementById('ck-ocr');
+  if(ck){
+    ck.textContent='รออ่านเลขจากภาพ';
+    const row=ck.closest('.crow');
+    const label=row&&row.querySelector('.clabel');
+    if(label) label.textContent='เลขสลากตรงกัน (OCR)';
+  }
+  document.querySelectorAll('#capfront .cap-hint').forEach(el=>{
+    el.textContent='วางสลากทั้งใบให้อยู่ในกรอบ แสงไม่สะท้อน และเห็นลายกระดาษ/บาร์โค้ดชัดเจน';
+  });
+}
+function applyHomeScanModes(){
+  const cards=document.querySelectorAll('.quick-row .quick-card');
+  if(cards[0]){
+    cards[0].onclick=()=>startScan('verify');
+    const title=cards[0].querySelector('.qt'), sub=cards[0].querySelector('.qs');
+    if(title) title.textContent='สแกนตรวจสลาก';
+    if(sub) sub.innerHTML='เช็กรหัส เลขสลาก<br>และภาพว่าเป็นสลากจริง';
+  }
+  if(cards[1]){
+    cards[1].onclick=()=>startScan('collect');
+    const title=cards[1].querySelector('.qt'), sub=cards[1].querySelector('.qs');
+    if(title) title.textContent='สแกนเก็บสิทธิ์';
+    if(sub) sub.innerHTML='ตรวจซ้ำก่อนเก็บ<br>ไม่ให้เก็บสลากเดิม';
+  }
+  document.querySelectorAll('.hero-cta').forEach(btn=>{
+    btn.onclick=()=>startScan('verify');
+    btn.firstChild && (btn.firstChild.textContent='สแกนตรวจเลย ');
+  });
+}
+applyVerificationCopy();
+applyUserSwitcher();
+applyHomeScanModes();
+const claimBtn=document.getElementById('prize-claim-btn'); if(claimBtn) claimBtn.onclick=beginClaim;
 renderSaved();
+if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+}
 setTimeout(()=>toast('💡 สแกนสลากจริงได้เลย · ข้อมูลจริง 21 ใบพร้อมในระบบ'),1200);
