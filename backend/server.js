@@ -45,12 +45,6 @@ function applyRuntime(row) {
   const owner = runtimeOwner(row.barcode);
   return owner ? { ...row, owner_id: owner } : row;
 }
-function hasDuplicateRuntimeNumber(row, userId) {
-  if (!row || !userId) return false;
-  const state = readRuntimeState();
-  const peers = db.prepare('SELECT barcode FROM tickets WHERE number = ? AND barcode <> ?').all(row.number, row.barcode);
-  return peers.some((peer) => state.ownership[String(peer.barcode)] === String(userId));
-}
 function audit(sql, params = []) {
   try { db.prepare(sql).run(...params); }
   catch (err) { console.warn('audit skipped:', err.message); }
@@ -85,7 +79,10 @@ function getTicket(code) {
   if (row) return applyRuntime(row);
   const digits = c.replace(/\D/g, '');
   const six = (c.match(/(?:^|\D)(\d{6})(?:\D|$)/) || [])[1] || (digits.length === 6 ? digits : null);
-  if (six) row = db.prepare('SELECT * FROM tickets WHERE number = ? ORDER BY barcode LIMIT 1').get(six);
+  if (six) {
+    const rows = db.prepare('SELECT * FROM tickets WHERE number = ? ORDER BY barcode').all(six);
+    row = rows.find((candidate) => !runtimeOwner(candidate.barcode)) || rows[0];
+  }
   return applyRuntime(row) || null;
 }
 
@@ -173,12 +170,6 @@ app.post('/api/scan-validate', (req, res) => {
     if (mode === 'collect' && row.owner_id) {
       ok = false;
       reasons.push(String(row.owner_id) === String(user_id) ? 'already_collected_by_you' : 'already_collected_by_other');
-    }
-    if (mode === 'collect' && user_id) {
-      if (hasDuplicateRuntimeNumber(row, user_id)) {
-        ok = false;
-        reasons.push('duplicate_number_collected');
-      }
     }
     if (row.is_claimed) {
       ok = false;
@@ -323,11 +314,6 @@ app.post('/api/ownership', (req, res) => {
 
   let status;
   if (!row.owner_id) {
-    if (hasDuplicateRuntimeNumber(row, user_id)) {
-      audit(`INSERT INTO scan_actions (barcode,user_id,action_type,result_status,lat,lng)
-        VALUES (?,?,?,?,?,?)`, [row.barcode, user_id, 'collect', 'review', lat, lng]);
-      return res.status(409).json({ status: 'duplicate_number_collected', ticket: shape(row) });
-    }
     setRuntimeOwner(row.barcode, user_id);
     status = 'registered';
   } else if (String(row.owner_id) === String(user_id)) {

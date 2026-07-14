@@ -96,7 +96,13 @@ function seedLookup(code){
   for(const k in SEED){ if(SEED[k].alt && SEED[k].alt===c) return SEED[k]; }
   const m=c.match(/(?:^|\D)(\d{6})(?:\D|$)/);
   const six=m?m[1]:(c.replace(/\D/g,'').length===6?c.replace(/\D/g,''):null);
-  if(six){ for(const k in SEED){ if(SEED[k].number===six) return SEED[k]; } }
+  if(six){
+    const matches=Object.keys(SEED).filter(k=>SEED[k].number===six).map(k=>SEED[k]);
+    if(matches.length){
+      let owners={}; try{owners=ownershipStore();}catch(e){}
+      return matches.find(t=>!owners[t.barcode]) || matches[0];
+    }
+  }
   return null;
 }
 
@@ -254,15 +260,15 @@ async function validateScannedCode(code){
   if(!ticket) reasons.push('barcode_not_found');
   if(ticket && scanned_number && scanned_number!==ticket.number) reasons.push('barcode_number_mismatch');
   if(ticket && S.mode==='collect' && ticket.owner_id) reasons.push(String(ticket.owner_id)===S.userId?'already_collected_by_you':'already_collected_by_other');
-  if(ticket && S.mode==='collect' && S.saved.some(t=>t.barcode===ticket.barcode || t.number===ticket.number)) reasons.push('duplicate_number_collected');
-  if(ticket && S.mode==='collect' && !reasons.includes('duplicate_number_collected') && userSavedTickets().some(t=>t.barcode===ticket.barcode || t.number===ticket.number)) reasons.push('duplicate_number_collected');
+  if(ticket && S.mode==='collect' && S.saved.some(t=>t.barcode===ticket.barcode)) reasons.push('duplicate_ticket_collected');
+  if(ticket && S.mode==='collect' && !reasons.includes('duplicate_ticket_collected') && userSavedTickets().some(t=>t.barcode===ticket.barcode)) reasons.push('duplicate_ticket_collected');
   return {ok:reasons.length===0,reasons,scanned_number,parsed_payload:parsedDataMatrixCodeJS(code),lookup_method:signatureTicket?'signature':ticket?'fallback':'none',number_match:!!ticket&&(!scanned_number||scanned_number===ticket.number),already_collected:!!(ticket&&ticket.owner_id),owner_mask:ticket&&ticket.owner_id?maskUserJS(ticket.owner_id):null,ticket};
 }
 function scanReasonText(validation){
   const reasons=(validation&&validation.reasons)||[];
   if(reasons.includes('barcode_number_mismatch')) return 'เลขในโค้ดไม่ตรงกับฐานข้อมูล';
   if(reasons.includes('already_collected_by_you')) return 'สลากนี้ถูกเก็บเข้าบัญชีคุณแล้ว';
-  if(reasons.includes('duplicate_number_collected')) return 'เลขสลากนี้ถูกเก็บเข้าบัญชีคุณแล้ว';
+  if(reasons.includes('duplicate_ticket_collected') || reasons.includes('duplicate_number_collected')) return 'สลากใบนี้ถูกเก็บเข้าบัญชีคุณแล้ว';
   if(reasons.includes('already_collected_by_other')) return 'สลากนี้ถูกเก็บสิทธิ์โดยบัญชีอื่นแล้ว';
   if(reasons.includes('already_claimed')) return 'สลากนี้ขึ้นเงินแล้ว';
   if(reasons.includes('claim_window_closed')) return 'สลากนี้หมดระยะขึ้นเงินแล้ว';
@@ -702,7 +708,7 @@ function renderVerify(t,ocrMatch,dateOK,ocrReadable){
     : '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>';
   set('ck-barcode', barcodeOK?'พบข้อมูล':'ไม่พบข้อมูล', barcodeOK?'ok':'bad');
   if(!ocrReadable) set('ck-ocr','อ่านเลขไม่ได้ — ถ่ายใหม่','warn');
-  else set('ck-ocr', ocrMatch?('ยืนยันจากบาร์โค้ด ('+(S.ocr||num)+')'):('ไม่พบเลขในฐานข้อมูล'), ocrMatch?'ok':'bad');
+  else set('ck-ocr', ocrMatch?('ยืนยันจากบาร์โค้ด ('+(S.ocr||num)+')'):('เลขที่อ่านได้ไม่ตรงกับเลขสลาก'), ocrMatch?'ok':'bad');
   // (B) AI image-authenticity row
   if(S.aiScore!=null){
     const good=!imgBad;
@@ -769,11 +775,11 @@ async function onCollect(){
   const t=S.ticket; if(!t) return;
   if(S.collectBusy) return;
   const save=document.getElementById('save-btn');
-  const localDuplicate = S.saved.some(x=>x.barcode===t.barcode || x.number===t.number);
+  const localDuplicate = S.saved.some(x=>x.barcode===t.barcode);
   if(localDuplicate || (t.owner_id && String(t.owner_id)===S.userId)){
-    set('ck-owner','สลาก/เลขนี้ถูกเก็บเข้าบัญชีคุณแล้ว','bad');
+    set('ck-owner','สลากใบนี้ถูกเก็บเข้าบัญชีคุณแล้ว','bad');
     set('ck-status','ไม่สามารถเก็บซ้ำได้','warn');
-    if(save){ save.style.opacity=.5; save.style.pointerEvents='none'; save.textContent='สลาก/เลขนี้ถูกเก็บแล้ว'; }
+    if(save){ save.style.opacity=.5; save.style.pointerEvents='none'; save.textContent='สลากใบนี้ถูกเก็บแล้ว'; }
     toast('ไม่สามารถเก็บซ้ำได้');
     return;
   }
@@ -805,10 +811,10 @@ async function onCollect(){
     if(t.owner_id && String(t.owner_id)!==S.userId) resp={status:'ownership_conflict',owner_mask:maskUserJS(t.owner_id)};
     else { persistOwnership(t,S.userId); t.owner_id=S.userId; resp={status:'registered'}; }
   }
-  if(resp.status==='already_yours' || resp.status==='duplicate_number_collected'){
-    set('ck-owner', resp.status==='duplicate_number_collected'?'เลขสลากนี้ถูกเก็บเข้าบัญชีคุณแล้ว':'สลากนี้อยู่ในบัญชีคุณแล้ว','bad');
+  if(resp.status==='already_yours' || resp.status==='duplicate_number_collected' || resp.status==='duplicate_ticket_collected'){
+    set('ck-owner', (resp.status==='duplicate_number_collected'||resp.status==='duplicate_ticket_collected')?'สลากใบนี้ถูกเก็บเข้าบัญชีคุณแล้ว':'สลากนี้อยู่ในบัญชีคุณแล้ว','bad');
     set('ck-status','ไม่สามารถเก็บซ้ำได้','warn');
-    const s=document.getElementById('save-btn'); s.style.opacity=.5; s.style.pointerEvents='none'; s.textContent='สลาก/เลขนี้ถูกเก็บแล้ว';
+    const s=document.getElementById('save-btn'); s.style.opacity=.5; s.style.pointerEvents='none'; s.textContent='สลากใบนี้ถูกเก็บแล้ว';
     toast('ไม่สามารถเก็บซ้ำได้'); S.collectBusy=false; return;
   }
   if(resp.status==='ownership_conflict'){
@@ -831,7 +837,7 @@ async function showPrize(register){
   const t=S.ticket; if(!t)return;
   if(register){
     await apiPost('/api/scans',geoBody({barcode:t.barcode,user_id:S.userId,action_type:'collect',ocr_result:S.ocr,result_status:'ok'}));
-    if(!S.saved.some(x=>x.barcode===t.barcode || x.number===t.number)){
+    if(!S.saved.some(x=>x.barcode===t.barcode)){
       const now=new Date();
       S.saved.unshift({...t,owner_id:t.owner_id||S.userId,savedAt:now.toLocaleDateString('th-TH'),savedTime:now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})+' น.',collectedAtISO:now.toISOString(),geo:S.geo});
       persistUserSaved();
