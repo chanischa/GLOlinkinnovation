@@ -253,7 +253,6 @@ async function validateScannedCode(code){
   const reasons=[];
   if(!ticket) reasons.push('barcode_not_found');
   if(ticket && scanned_number && scanned_number!==ticket.number) reasons.push('barcode_number_mismatch');
-  if(ticket && S.mode==='collect' && !scanned_number) reasons.push('scan_number_unavailable');
   if(ticket && S.mode==='collect' && ticket.owner_id) reasons.push(String(ticket.owner_id)===S.userId?'already_collected_by_you':'already_collected_by_other');
   if(ticket && S.mode==='collect' && S.saved.some(t=>t.barcode===ticket.barcode || t.number===ticket.number)) reasons.push('duplicate_number_collected');
   if(ticket && S.mode==='collect' && !reasons.includes('duplicate_number_collected') && userSavedTickets().some(t=>t.barcode===ticket.barcode || t.number===ticket.number)) reasons.push('duplicate_number_collected');
@@ -273,7 +272,7 @@ function scanReasonText(validation){
 async function onDetect(raw){
   if(S.barcode) return;                                  // ignore repeats
   const code = String(raw).trim();
-  if(/^https?:\/\//i.test(code)) return;                 // ignore the distributor QR link, keep scanning
+  if(/^https?:\/\//i.test(code) && !scannedNumberFromCodeJS(code)) return; // ignore distributor QR links without a ticket number
   S.barcode = code;                                      // keep the full Data Matrix / barcode payload
   S.scanCanContinue=false; S.scanValidation=null;
   const st=document.getElementById('scan-status'), btn=document.getElementById('scan-btn');
@@ -346,9 +345,9 @@ async function startScan(mode){
       }).catch(()=>{ st.textContent='⚠️ อ่านบาร์โค้ดไม่ได้ — ลองขยับให้ชัดขึ้น หรือแตะ “สแกนสำเร็จ” เพื่อทดสอบ'; btn.disabled=false; S.barcode=S.barcode||'69-26-13-039184-4358'; });
     }
     else{
-      st.textContent='⚠️ ไม่พบตัวอ่านบาร์โค้ด — แตะ “สแกนสำเร็จ” เพื่อทดสอบ'; btn.disabled=false; S.barcode='69-26-13-039184-4358';
+      st.textContent='⚠️ ไม่พบตัวอ่านบาร์โค้ด — แตะ “สแกนสำเร็จ” เพื่อทดสอบ'; btn.disabled=false; S.barcode=S.mode==='collect'?'69-28-18-910054-3779':'69-26-13-039184-4358';
     }
-  }catch(e){ st.textContent='❌ เปิดกล้องไม่ได้ — อนุญาตการเข้าถึงกล้อง แล้วแตะ “สแกนสำเร็จ” เพื่อทดสอบ'; btn.disabled=false; S.barcode='69-26-13-039184-4358'; }
+  }catch(e){ st.textContent='❌ เปิดกล้องไม่ได้ — อนุญาตการเข้าถึงกล้อง แล้วแตะ “สแกนสำเร็จ” เพื่อทดสอบ'; btn.disabled=false; S.barcode=S.mode==='collect'?'69-28-18-910054-3779':'69-26-13-039184-4358'; }
 }
 function stopScan(){
   if(S.loop){clearInterval(S.loop);S.loop=null;}
@@ -997,9 +996,13 @@ function applyHomeScanModes(){
     if(sub) sub.innerHTML='ตรวจซ้ำก่อนเก็บ<br>ไม่ให้เก็บสลากเดิม';
   }
   document.querySelectorAll('.hero-cta').forEach(btn=>{
-    btn.onclick=()=>startScan('verify');
-    btn.firstChild && (btn.firstChild.textContent='สแกนตรวจเลย ');
+    btn.onclick=()=>startScan('collect');
+    btn.firstChild && (btn.firstChild.textContent='สแกนเก็บเลย ');
   });
+  const svc=document.querySelectorAll('.svc-grid .svc-item');
+  if(svc[1]) svc[1].onclick=()=>startScan('collect');
+  if(svc[2]) svc[2].onclick=()=>startScan('verify');
+  document.querySelectorAll('.mini-scan').forEach(btn=>btn.onclick=()=>startScan('collect'));
 }
 applyVerificationCopy();
 applyUserSwitcher();
