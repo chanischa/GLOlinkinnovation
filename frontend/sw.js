@@ -1,4 +1,4 @@
-const CACHE_NAME = 'glo-ticket-verifier-v11';
+const CACHE_NAME = 'glo-ticket-verifier-v12';
 const APP_SHELL = [
   './',
   'index.html',
