@@ -500,14 +500,11 @@ function preprocess(dataURL){
   });
 }
 
-function preprocessRegion(dataURL, crop, mode){
+function preprocessRegion(dataURL, mode){
   return new Promise(resolve=>{
     const im=new Image();
     im.onload=()=>{
-      const sx=crop?Math.max(0,Math.round(im.width*crop.x)):0;
-      const sy=crop?Math.max(0,Math.round(im.height*crop.y)):0;
-      const sw=crop?Math.min(im.width-sx,Math.round(im.width*crop.w)):im.width;
-      const sh=crop?Math.min(im.height-sy,Math.round(im.height*crop.h)):im.height;
+      const sx=0, sy=0, sw=im.width, sh=im.height;
       const targetW=mode==='line'?1800:1600;
       const scale=Math.min(4, Math.max(1.4, targetW/Math.max(1,sw)));
       const pad=36;
@@ -535,9 +532,9 @@ function preprocessRegion(dataURL, crop, mode){
         p[i]=p[i+1]=p[i+2]=v;
       }
       x.putImageData(d,0,0);
-      resolve(c.toDataURL('image/png'));
+      resolve({url:c.toDataURL('image/png'), width:c.width, height:c.height});
     };
-    im.onerror=()=>resolve(dataURL);
+    im.onerror=()=>resolve({url:dataURL, width:0, height:0});
     im.src=dataURL;
   });
 }
@@ -555,74 +552,85 @@ function extractNumber(text){
   return null;
 }
 
-function extractNumberCandidates(text){
-  const groups=(text.match(/\d+/g)||[]);
+function sixDigitRuns(digits){
   const out=[];
-  for(const g of groups){
-    if(g.length===6) out.push(g);
-    else if(g.length>6 && g.length<=18){
-      for(let i=0;i<=g.length-6;i++) out.push(g.slice(i,i+6));
-    }
+  if(digits.length===6) out.push(digits);
+  else if(digits.length>6 && digits.length<=18){
+    for(let i=0;i<=digits.length-6;i++) out.push(digits.slice(i,i+6));
   }
   return [...new Set(out)];
 }
 
+// Tesseract only exposes word/line bounding boxes when `blocks` output is requested.
+function flattenLines(data){
+  const lines=[];
+  for(const block of data.blocks||[]){
+    for(const para of block.paragraphs||[]){
+      for(const line of para.lines||[]) lines.push(line);
+    }
+  }
+  return lines;
+}
+function lineConfidence(line){
+  if(typeof line.confidence==='number') return line.confidence;
+  const words=line.words||[];
+  return words.length ? words.reduce((s,w)=>s+(w.confidence||0),0)/words.length : 0;
+}
+
+// Locate the lottery number by how it looks on the ticket, not by a guessed crop box:
+// it's printed in a much larger font than the barcode/serial digits and sits toward the
+// top-right. Score every digit run Tesseract finds by glyph height (line bbox = font size)
+// with a top-right position bonus, and take the winner.
 async function runOCR(img,ticket,isPlaceholder){
   // Demo placeholder (no real camera): trust the ticket number so the flow is testable.
   if(isPlaceholder) return ticket && ticket.number!=='??????' ? ticket.number : null;
   // Real photo: read it for real. If we can't read a 6-digit number → return null
   // (STRICT: an unreadable photo must NOT silently pass as a match).
-  if(img && typeof Tesseract!=='undefined'){
-    const expected=ticket&&ticket.number&&ticket.number!=='??????'?String(ticket.number):null;
-    const variants=[
-      {name:'main_number_top_right',crop:{x:.42,y:.08,w:.55,h:.24},psm:'7',mode:'line'},
-      {name:'main_number_upper_band',crop:{x:.30,y:.04,w:.68,h:.34},psm:'6',mode:'line'},
-      {name:'ticket_middle',crop:{x:.08,y:.10,w:.86,h:.52},psm:'6',mode:'block'},
-      {name:'full_frame',crop:null,psm:'6',mode:'block'}
-    ];
-    const allCandidates=[];
-    let bestConfidence=0;
-    try{
-      const w=await Tesseract.createWorker('eng');
-      for(const v of variants){
-        const pre=await preprocessRegion(img,v.crop,v.mode);
-        await w.setParameters({
-          tessedit_char_whitelist:'0123456789',
-          tessedit_pageseg_mode:v.psm,
-          preserve_interword_spaces:'1'
-        });
-        const {data}=await w.recognize(pre);
-        const confidence=Math.round((data&&data.confidence)||0);
-        if(confidence>bestConfidence) bestConfidence=confidence;
-        const text=data.text||'';
-        const candidates=extractNumberCandidates(text);
-        for(const value of candidates) allCandidates.push({value,confidence,source:v.name});
-        if(expected && candidates.includes(expected)){
-          await w.terminate();
-          S.ocrConfidence=confidence;
-          S.ocrSource=v.name;
-          S.ocrCandidates=candidates;
-          return expected;
-        }
-        if(candidates.length && confidence>=35){
-          await w.terminate();
-          S.ocrConfidence=confidence;
-          S.ocrSource=v.name;
-          S.ocrCandidates=candidates;
-          return candidates[0];
+  if(!(img && typeof Tesseract!=='undefined')) return null;
+
+  const expected=ticket&&ticket.number&&ticket.number!=='??????'?String(ticket.number):null;
+  const passes=['line','block'];   // two contrast/threshold strategies over the whole photo
+  const allCandidates=[];          // {value, score, confidence, source}
+  let worker=null;
+  try{
+    worker=await Tesseract.createWorker('eng');
+    for(const mode of passes){
+      const pre=await preprocessRegion(img,mode);
+      await worker.setParameters({
+        tessedit_char_whitelist:'0123456789',
+        tessedit_pageseg_mode:'11',        // sparse text: find every digit blob, no layout assumptions
+        preserve_interword_spaces:'1'
+      });
+      const {data}=await worker.recognize(pre.url,{},{blocks:true});
+      const pageW=pre.width||1, pageH=pre.height||1;
+      for(const line of flattenLines(data)){
+        if(!line.bbox) continue;
+        const digits=(line.words||[]).map(w=>w.text).join('').replace(/\D/g,'');
+        if(digits.length<6) continue;
+        const {x0,y0,x1,y1}=line.bbox;
+        const height=y1-y0;
+        const cx=(x0+x1)/2/pageW, cy=(y0+y1)/2/pageH;
+        const posBonus=cx*0.5+(1-cy)*0.5;              // favors right + top
+        const score=height*(1+posBonus*0.6);
+        const confidence=Math.round(lineConfidence(line));
+        for(const value of sixDigitRuns(digits)){
+          allCandidates.push({value,score,confidence,source:mode});
+          if(expected && value===expected){
+            S.ocrConfidence=confidence; S.ocrSource=mode+':expected-match'; S.ocrCandidates=[value];
+            return expected;
+          }
         }
       }
-      await w.terminate();
-      S.ocrConfidence=bestConfidence;
-      S.ocrCandidates=allCandidates.map(c=>c.value);
-      if(allCandidates.length){
-        allCandidates.sort((a,b)=>b.confidence-a.confidence);
-        S.ocrSource=allCandidates[0].source;
-        return allCandidates[0].value;
-      }
-    }catch(e){ console.warn('OCR error',e); }
-  }
-  return null;   // unreadable
+    }
+  }catch(e){ console.warn('OCR error',e); }
+  finally{ if(worker){ try{ await worker.terminate(); }catch(e){} } }
+
+  if(!allCandidates.length) return null;
+  allCandidates.sort((a,b)=>b.score-a.score);           // biggest, most top-right digit run wins
+  S.ocrCandidates=[...new Set(allCandidates.map(c=>c.value))];
+  S.ocrSource=allCandidates[0].source+':size';
+  S.ocrConfidence=allCandidates[0].confidence;
+  return allCandidates[0].value;
 }
 
 /* ---------- RENDER VERIFY ---------- */
