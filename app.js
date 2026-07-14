@@ -913,6 +913,6 @@ applyHomeScanModes();
 const claimBtn=document.getElementById('prize-claim-btn'); if(claimBtn) claimBtn.onclick=beginClaim;
 renderSaved();
 if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
 setTimeout(()=>toast('💡 สแกนสลากจริงได้เลย · ข้อมูลจริง 21 ใบพร้อมในระบบ'),1200);
