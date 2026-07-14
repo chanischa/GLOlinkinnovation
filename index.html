@@ -278,6 +278,34 @@ canvas{display:none}
 
 /* ============ PRIZE ============ */
 #prize{background:linear-gradient(180deg,var(--bg-top),#F4F9FF 40%)}
+.collect-screen{background:linear-gradient(180deg,#F8FBFF,#fff 48%)}
+.collect-preview{margin:8px 18px 12px;padding:16px 12px 4px;position:relative}
+.collect-frame{position:relative;padding:18px 16px;border-radius:22px;background:rgba(255,255,255,.76);box-shadow:0 12px 34px rgba(27,98,214,.13)}
+.collect-frame .corner{width:28px;height:28px;border-width:3.5px;border-color:var(--blue);filter:none}
+.collect-ok{text-align:center;margin:12px 0 16px;color:var(--ink)}
+.collect-ok .badge{width:36px;height:36px;border-radius:50%;background:var(--green);display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-right:8px}
+.collect-ok .badge svg{width:22px;height:22px;stroke:#fff;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.collect-ok b{font-size:22px;font-weight:900;color:var(--blue-deep);vertical-align:middle}
+.collect-ok p{font-size:14px;color:var(--ink-soft);margin-top:7px}
+.collect-card{margin:0 18px 16px;background:#fff;border-radius:20px;box-shadow:0 6px 22px rgba(27,98,214,.08);overflow:hidden}
+.collect-row{display:flex;align-items:center;gap:13px;padding:15px 17px;border-bottom:1px solid var(--line)}
+.collect-row:last-child{border-bottom:none}
+.collect-row .ric{width:28px;height:28px;border-radius:9px;background:var(--blue-tint);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.collect-row .ric svg{width:18px;height:18px;stroke:var(--blue);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.collect-row .rl{flex:1;font-size:14px;color:var(--ink);font-weight:700}
+.collect-row .rv{font-size:16px;color:var(--blue-deep);font-weight:900;text-align:right}
+.owner-card{margin:0 18px 16px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 6px 22px rgba(27,98,214,.08);display:flex;align-items:center;gap:14px}
+.owner-card .shield{width:54px;height:54px;border-radius:15px;background:var(--green-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.owner-card .shield svg{width:32px;height:32px;fill:var(--green)}
+.owner-card b{display:block;font-size:16px;color:var(--blue-deep);margin-bottom:3px}
+.owner-card p{font-size:13px;color:var(--ink);line-height:1.45}
+.tips-card{margin:0 18px 18px;background:var(--blue-tint);border-radius:20px;padding:17px 18px;color:var(--ink)}
+.tips-card h3{font-size:15px;font-weight:900;color:var(--blue-deep);margin-bottom:12px}
+.tips-card p{font-size:13.5px;line-height:1.8;margin:7px 0}
+.tips-card p:before{content:'✓';display:inline-flex;width:20px;height:20px;border-radius:50%;background:#D8EAFD;color:var(--blue);align-items:center;justify-content:center;margin-right:8px;font-weight:900}
+.collect-actions{padding:0 18px 28px}
+.collect-actions .btn-primary{display:flex;align-items:center;justify-content:center;gap:9px}
+.collect-actions .btn-primary svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}
 .prize-card{margin:12px 18px 16px;background:#fff;border-radius:22px;padding:28px 22px 26px;text-align:center;box-shadow:0 6px 22px rgba(27,98,214,.1);position:relative;overflow:hidden}
 .confetti{position:absolute;inset:0;pointer-events:none}
 .confetti i{position:absolute;width:8px;height:8px;border-radius:2px;opacity:.9}
@@ -473,6 +501,39 @@ canvas{display:none}
   </nav>
 </section>
 
+<!-- ============ TICKET DETAIL ============ -->
+<section id="ticketdetail" class="screen">
+  <div class="nav-back"><button class="round-btn" onclick="showTickets()"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><h2>รายละเอียดสลาก</h2></div>
+  <div class="scroll" style="padding-bottom:30px">
+    <div class="tcard">
+      <div class="tcard-title">สลากที่เก็บไว้ในบัญชี</div>
+      <div class="ticket">
+        <div class="ticket-l"><div class="seal-w"></div><div class="glo-mini">GL<em>O</em></div></div>
+        <div class="ticket-r">
+          <div class="tnum-box" id="td-num-box"></div>
+          <div class="tdate"><div class="th" id="td-th-date">—</div><div class="en" id="td-en-date">—</div></div>
+          <div class="tmeta">งวดที่ <span class="chip" id="td-series-chip">—</span> ชุดที่ <span class="chip" id="td-set-chip">—</span></div>
+          <div class="tbar"><div class="bars"></div><div class="code" id="td-barcode">—</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="detail">
+      <div class="detail-h">ข้อมูลการเก็บสลาก</div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v3a2 2 0 000 4v3a2 2 0 01-2 2H6a2 2 0 01-2-2v-3a2 2 0 000-4V7z"/></svg></div><div class="dl">เลขสลาก</div><div class="dv" id="td-num">—</div></div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg></div><div class="dl">งวดวันที่</div><div class="dv ink" id="td-date">—</div></div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg></div><div class="dl">ชุด / ใบที่</div><div class="dv" id="td-set">—</div></div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></div><div class="dl">สถานะสิทธิ์</div><div class="dv g" id="td-owner">สลากของคุณ</div></div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div class="dl">วันที่เก็บ</div><div class="dv ink" id="td-saved">—</div></div>
+      <div class="drow"><div class="dic"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div><div class="dl">ตำแหน่งที่เก็บ</div><div class="dv ink" id="td-geo">—</div></div>
+      <div class="drow"><div class="dic g"><svg viewBox="0 0 24 24"><path d="M6 4h12v3a6 6 0 01-12 0V4zM9 16h6v3H9z"/></svg></div><div class="dl">ผลรางวัล</div><div class="dv" id="td-prize">—</div></div>
+    </div>
+    <div class="claim-acts">
+      <button class="btn-primary" onclick="openSavedPrize()">ดูผลรางวัล</button>
+      <button class="btn-outline" onclick="showTickets()">กลับไปสลากของฉัน</button>
+    </div>
+  </div>
+</section>
+
 <!-- ============ SCAN ============ -->
 <section id="scan" class="screen cap-scr">
   <video id="scan-video" autoplay playsinline muted></video>
@@ -593,6 +654,54 @@ canvas{display:none}
   </div>
 </section>
 
+<!-- ============ CONFIRM COLLECT ============ -->
+<section id="collectconfirm" class="screen collect-screen">
+  <div class="statusbar"><span>9:41</span><span class="sb-right">
+    <svg viewBox="0 0 20 14"><rect x="0" y="8" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="11" rx="1"/><rect x="15" y="0" width="3" height="13" rx="1"/></svg>
+    <svg viewBox="0 0 18 14"><path d="M9 11.5a1.4 1.4 0 100 2.8 1.4 1.4 0 000-2.8zM2 5.5a10 10 0 0114 0M4.6 8.2a6 6 0 018.8 0"/></svg>
+    <svg viewBox="0 0 26 14"><rect x="0.5" y="1" width="21" height="12" rx="3" fill="none" stroke="#1A2B4A"/><rect x="2.5" y="3" width="17" height="8" rx="1.5"/><rect x="23" y="4.5" width="2" height="5" rx="1"/></svg>
+  </span></div>
+  <div class="nav-back"><button class="round-btn" onclick="go('verify')"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><h2>ยืนยันการเก็บสลาก</h2></div>
+  <div class="scroll" style="padding-bottom:26px">
+    <div class="collect-preview">
+      <div class="collect-frame">
+        <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+        <div class="ticket">
+          <div class="ticket-l"><div class="seal-w"></div><div class="glo-mini">GL<em>O</em></div></div>
+          <div class="ticket-r">
+            <div class="tnum-box" id="cc-num-box"></div>
+            <div class="tdate"><div class="th" id="cc-th-date">—</div><div class="en" id="cc-en-date">—</div></div>
+            <div class="tmeta">งวดที่ <span class="chip" id="cc-series-chip">—</span> ชุดที่ <span class="chip" id="cc-set-chip">—</span></div>
+            <div class="tbar"><div class="bars"></div><div class="code" id="cc-barcode">—</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="collect-ok"><span class="badge"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><b>สแกนสำเร็จ</b><p>กรุณาตรวจสอบข้อมูลให้ถูกต้องก่อนยืนยัน</p></div>
+    </div>
+    <div class="collect-card">
+      <div class="collect-row"><div class="ric"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2z"/></svg></div><div class="rl">เลขสลาก</div><div class="rv" id="cc-num">—</div></div>
+      <div class="collect-row"><div class="ric"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></svg></div><div class="rl">งวดวันที่</div><div class="rv" id="cc-date">—</div></div>
+      <div class="collect-row"><div class="ric"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg></div><div class="rl">ชุดที่</div><div class="rv" id="cc-series">—</div></div>
+      <div class="collect-row"><div class="ric"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-3-6 3z"/></svg></div><div class="rl">ใบที่</div><div class="rv" id="cc-set">—</div></div>
+      <div class="collect-row"><div class="ric"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M8 11h8"/></svg></div><div class="rl">ราคา</div><div class="rv" id="cc-price">—</div></div>
+    </div>
+    <div class="owner-card">
+      <div class="shield"><svg viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3z"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><b>สลากนี้ยังไม่ได้ถูกรับสิทธิ์</b><p>คุณสามารถเก็บสลากใบนี้เข้าบัญชีของคุณได้</p></div>
+    </div>
+    <div class="tips-card">
+      <h3>คำแนะนำ</h3>
+      <p>ตรวจสอบเลขสลาก, งวดวันที่, ชุดที่ และใบที่ให้ถูกต้อง</p>
+      <p>เมื่อยืนยันแล้ว สลากจะถูกผูกเข้ากับบัญชีของคุณ</p>
+      <p>ไม่สามารถยกเลิกการเก็บสลากได้</p>
+    </div>
+    <div class="collect-actions">
+      <button class="btn-primary" onclick="beginCollectConfirm()"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>ยืนยันการเก็บสลาก</button>
+      <button class="btn-outline" onclick="resetFlow();startScan('collect')">สแกนใหม่</button>
+    </div>
+  </div>
+</section>
+
 <!-- ============ PRIZE ============ -->
 <section id="prize" class="screen">
   <div class="top-header"><div class="brand-col" id="logo-prize"></div><button class="round-btn" onclick="showTickets()"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button></div>
@@ -677,7 +786,7 @@ canvas{display:none}
 <!-- ============ PIN OVERLAY ============ -->
 <div class="pin-ov" id="pin-ov">
   <div class="pin-sheet">
-    <h3>ยืนยันด้วย PIN</h3><p>กรอกรหัส PIN 6 หลักเพื่อยืนยันการรับเงิน</p>
+    <h3 id="pin-title">ยืนยันด้วย PIN</h3><p id="pin-copy">กรอกรหัส PIN 6 หลักเพื่อยืนยันการรับเงิน</p>
     <div class="pin-dots" id="pin-dots"><i></i><i></i><i></i><i></i><i></i><i></i></div>
     <div class="pad">
       <button onclick="pin('1')">1</button><button onclick="pin('2')">2</button><button onclick="pin('3')">3</button>
