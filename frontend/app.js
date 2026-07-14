@@ -122,7 +122,7 @@ const S = {barcode:null,ticket:null,frontImg:null,backImg:null,ocr:null,pin:'',
   userId:localStorage.getItem('glo_user_id') || '0812345678',          // the logged-in demo user
   mode:'collect',               // 'verify' = check only · 'collect' = take ownership
   streams:{scan:null,front:null,back:null}, loop:null, flash:false, saved:[],
-  scanCanContinue:false, scanValidation:null, collectBusy:false};
+  scanCanContinue:false, scanValidation:null, collectBusy:false, pinAction:'claim', detailTicket:null};
 
 // mask a phone/id for display, e.g. 0898887777 -> 08x-xxx-7777
 function maskUserJS(id){const s=String(id); return s.length>=7? s.slice(0,2)+'x-xxx-'+s.slice(-4) : s.slice(0,2)+'***';}
@@ -637,9 +637,8 @@ async function runOCR(img,ticket,isPlaceholder){
 function renderVerify(t,ocrMatch,dateOK,ocrReadable){
   if(ocrReadable===undefined) ocrReadable=true;
   // ticket graphic number boxes
-  const thainames={'0':'ศูนย์','1':'หนึ่ง','2':'สอง','3':'สาม','4':'สี่','5':'ห้า','6':'หก','7':'เจ็ด','8':'แปด','9':'เก้า'};
   const num=(t.number&&t.number!=='??????')?t.number:'------';
-  document.getElementById('tnum-box').innerHTML=num.split('').map(d=>`<div class="d"><b>${d}</b><small>${thainames[d]||''}</small></div>`).join('');
+  document.getElementById('tnum-box').innerHTML=ticketNumberBoxes(num);
   document.getElementById('tk-th-date').textContent=t.draw_date!=='—'?t.draw_date.replace('ก.ค.','กรกฎาคม').replace('ธ.ค.','ธันวาคม'):'—';
   document.getElementById('tk-en-date').textContent=t.draw_en||'—';
   document.getElementById('tk-series').textContent=t.series;
@@ -694,14 +693,43 @@ function renderVerify(t,ocrMatch,dateOK,ocrReadable){
       : outcome==='review'?'ถ่ายภาพใหม่ให้ชัดขึ้น' : 'ไม่สามารถบันทึกได้';}
   else{save.style.opacity=1;save.style.pointerEvents='all';
     save.textContent = S.mode==='verify' ? 'ดูผลการตรวจรางวัล' : 'เก็บสิทธิ์เข้าบัญชี';}
+  if(S.mode==='collect' && !blocked){
+    renderCollectConfirm(t);
+    return;
+  }
   go('verify');
 }
 function set(id,txt,cls){const e=document.getElementById(id);e.textContent=txt;e.className='cval '+(cls||'');}
 
+function ticketNumberBoxes(num){
+  const thainames={'0':'ศูนย์','1':'หนึ่ง','2':'สอง','3':'สาม','4':'สี่','5':'ห้า','6':'หก','7':'เจ็ด','8':'แปด','9':'เก้า'};
+  return String(num||'------').split('').map(d=>`<div class="d"><b>${d}</b><small>${thainames[d]||''}</small></div>`).join('');
+}
+function fillTicketPreview(prefix,t){
+  const num=(t.number&&t.number!=='??????')?t.number:'------';
+  const box=document.getElementById(prefix+'-num-box'); if(box) box.innerHTML=ticketNumberBoxes(num);
+  const th=document.getElementById(prefix+'-th-date'); if(th) th.textContent=t.draw_date||'—';
+  const en=document.getElementById(prefix+'-en-date'); if(en) en.textContent=t.draw_en||'—';
+  const series=document.getElementById(prefix+'-series-chip'); if(series) series.textContent=t.series||'—';
+  const setChip=document.getElementById(prefix+'-set-chip'); if(setChip) setChip.textContent=t.set||'—';
+  const barcode=document.getElementById(prefix+'-barcode'); if(barcode) barcode.textContent=(t.alt&&t.alt.length?t.alt:t.barcode)||'—';
+}
+function renderCollectConfirm(t){
+  fillTicketPreview('cc',t);
+  document.getElementById('cc-num').textContent=t.number||'—';
+  document.getElementById('cc-date').textContent=t.draw_date||'—';
+  document.getElementById('cc-series').textContent=t.series||'—';
+  document.getElementById('cc-set').textContent=t.set||'—';
+  document.getElementById('cc-price').textContent=(t.price||80)+' บาท';
+  go('collectconfirm');
+}
+
 /* ---------- SCAN MODE ACTIONS ---------- */
 // Primary button on the verify screen. Verify mode = show result only (no ownership).
 // Collect mode = register ownership first, then show the prize.
-function onPrimary(){ if(S.mode==='verify') showPrize(false); else onCollect(); }
+function onPrimary(){ if(S.mode==='verify') showPrize(false); else beginCollectConfirm(); }
+
+function beginCollectConfirm(){ openPin('collect'); }
 
 // SCAN MODE 2: take ownership. Handles the ownership-conflict case.
 async function onCollect(){
@@ -770,7 +798,8 @@ async function showPrize(register){
   if(register){
     await apiPost('/api/scans',geoBody({barcode:t.barcode,user_id:S.userId,action_type:'collect',ocr_result:S.ocr,result_status:'ok'}));
     if(!S.saved.some(x=>x.barcode===t.barcode || x.number===t.number)){
-      S.saved.unshift({...t,owner_id:t.owner_id||S.userId,savedAt:new Date().toLocaleDateString('th-TH'),geo:S.geo});
+      const now=new Date();
+      S.saved.unshift({...t,owner_id:t.owner_id||S.userId,savedAt:now.toLocaleDateString('th-TH'),savedTime:now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})+' น.',collectedAtISO:now.toISOString(),geo:S.geo});
     }
   }
   const win=t.prize_type&&t.prize_amount>0;
@@ -810,9 +839,17 @@ async function beginClaim(){
   }
   openPin();
 }
-function openPin(){S.pin='';drawPin();document.getElementById('pin-ov').classList.add('show');}
+function openPin(action='claim'){
+  S.pinAction=action;
+  S.pin='';
+  const title=document.getElementById('pin-title'), copy=document.getElementById('pin-copy');
+  if(title) title.textContent=action==='collect'?'ยืนยันเก็บสลากด้วย PIN':'ยืนยันด้วย PIN';
+  if(copy) copy.textContent=action==='collect'?'กรอกรหัส PIN 6 หลักเพื่อยืนยันการเก็บสลากเข้าบัญชี':'กรอกรหัส PIN 6 หลักเพื่อยืนยันการรับเงิน';
+  drawPin();
+  document.getElementById('pin-ov').classList.add('show');
+}
 function closePin(){document.getElementById('pin-ov').classList.remove('show');S.pin='';drawPin();}
-function pin(d){if(S.pin.length>=6)return;S.pin+=d;drawPin();if(S.pin.length===6)setTimeout(()=>{closePin();finishClaim();},260);}
+function pin(d){if(S.pin.length>=6)return;S.pin+=d;drawPin();if(S.pin.length===6)setTimeout(()=>{const action=S.pinAction;closePin();action==='collect'?onCollect():finishClaim();},260);}
 function pinDel(){S.pin=S.pin.slice(0,-1);drawPin();}
 function drawPin(){document.querySelectorAll('#pin-dots i').forEach((el,i)=>el.classList.toggle('on',i<S.pin.length));}
 async function finishClaim(){
@@ -837,10 +874,32 @@ function renderSaved(){
   const list=document.getElementById('tkt-list'),empty=document.getElementById('tkt-empty');
   if(!S.saved.length){list.innerHTML='';empty.style.display='flex';return;}
   empty.style.display='none';
-  list.innerHTML=S.saved.map(t=>`<div class="tkt-item" onclick="toast('เลขสลาก ${t.number}')">
-    <div style="flex:1"><div class="tnum">${t.number}</div><div class="tsub">งวด ${t.draw_date} · บันทึก ${t.savedAt}</div></div>
+  list.innerHTML=S.saved.map((t,i)=>`<div class="tkt-item" onclick="openTicketDetail(${i})">
+    <div style="flex:1"><div class="tnum">${t.number}</div><div class="tsub">งวด ${t.draw_date} · เก็บ ${t.savedAt}${t.savedTime?' '+t.savedTime:''}</div></div>
     <span class="tbadge ${t.prize_type?'won':'saved'}">${t.prize_type?'🏆 ถูกรางวัล':'บันทึกแล้ว'}</span>
   </div>`).join('');
+}
+
+function geoText(geo){
+  return geo ? (geo.lat.toFixed(4)+', '+geo.lng.toFixed(4)+' (±'+geo.acc+'ม.)') : 'ไม่ได้อนุญาตตำแหน่ง';
+}
+function openTicketDetail(index){
+  const t=S.saved[index]; if(!t) return;
+  S.detailTicket=t;
+  fillTicketPreview('td',t);
+  document.getElementById('td-num').textContent=t.number||'—';
+  document.getElementById('td-date').textContent=t.draw_date||'—';
+  document.getElementById('td-set').textContent=(t.series||'—')+' / '+(t.set||'—');
+  document.getElementById('td-owner').textContent=String(t.owner_id||S.userId)===String(S.userId)?'สลากของคุณ':'บัญชีอื่น';
+  document.getElementById('td-saved').textContent=(t.savedAt||'—')+(t.savedTime?' '+t.savedTime:'');
+  document.getElementById('td-geo').textContent=geoText(t.geo);
+  document.getElementById('td-prize').textContent=t.prize_type?(t.prize_type+' '+Number(t.prize_amount||0).toLocaleString('th-TH')+' บาท'):'ไม่ถูกรางวัล';
+  go('ticketdetail');
+}
+function openSavedPrize(){
+  if(!S.detailTicket) return;
+  S.ticket=S.detailTicket;
+  showPrize(false);
 }
 
 function resetFlow(){S.barcode=null;S.frontImg=null;S.backImg=null;S.ocr=null;
