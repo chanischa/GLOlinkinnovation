@@ -418,6 +418,12 @@ async function runVerify(){
   S.ocr = await runOCR(S.frontImg, ticket, S.frontPlaceholder);
   ocrReadable = S.frontPlaceholder ? true : (S.ocr!=null);
   ocrMatch = ticket.status !== 'invalid' && ticket.number!=='??????' && S.ocr === ticket.number;
+  S.ocrWarning = null;
+  if(ticket.status !== 'invalid' && ticket.number!=='??????' && (!ocrReadable || !ocrMatch)){
+    S.ocrWarning = !ocrReadable ? 'ocr_unreadable' : 'ocr_mismatch';
+    ocrReadable = true;
+    ocrMatch = true;
+  }
   await sleep(300); step(3,'done');
 
   // ---- (B) IMAGE AUTHENTICITY: real pixel analysis for screenshot/photocopy signals ----
@@ -707,7 +713,9 @@ function renderVerify(t,ocrMatch,dateOK,ocrReadable){
     : tone==='warn'?'<svg viewBox="0 0 24 24"><path d="M12 3l9 16H3zM12 9v5M12 17h.01"/></svg>'
     : '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>';
   set('ck-barcode', barcodeOK?'พบข้อมูล':'ไม่พบข้อมูล', barcodeOK?'ok':'bad');
-  if(!ocrReadable) set('ck-ocr','อ่านเลขไม่ได้ — ถ่ายใหม่','warn');
+  if(S.ocrWarning==='ocr_unreadable') set('ck-ocr','OCR อ่านไม่ชัด · ยืนยันจากบาร์โค้ด','warn');
+  else if(S.ocrWarning==='ocr_mismatch') set('ck-ocr','OCR อ่านได้ '+(S.ocr||'—')+' · ใช้เลขจากบาร์โค้ด','warn');
+  else if(!ocrReadable) set('ck-ocr','อ่านเลขไม่ได้ — ถ่ายใหม่','warn');
   else set('ck-ocr', ocrMatch?('ยืนยันจากบาร์โค้ด ('+(S.ocr||num)+')'):('เลขที่อ่านได้ไม่ตรงกับเลขสลาก'), ocrMatch?'ok':'bad');
   // (B) AI image-authenticity row
   if(S.aiScore!=null){
@@ -944,7 +952,7 @@ function openSavedPrize(){
 }
 
 function resetFlow(){S.barcode=null;S.frontImg=null;S.backImg=null;S.ocr=null;
-  S.frontPlaceholder=false;S.backPlaceholder=false;S.aiScore=null;S.aiReason=null;S.aiScreenshot=false;S.ocrConfidence=null;
+  S.frontPlaceholder=false;S.backPlaceholder=false;S.aiScore=null;S.aiReason=null;S.aiScreenshot=false;S.ocrConfidence=null;S.ocrWarning=null;
   ['front','back'].forEach(s=>{document.getElementById(s+'-thumb').style.display='none';document.getElementById(s+'-next').classList.remove('on');});}
 
 /* ---------- boot ---------- */
