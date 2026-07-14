@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: glo-lottolink
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: glo-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: GLO_DB_PATH
+        value: /var/data/glo.db
+      - key: GLO_RUNTIME_STATE_PATH
+        value: /var/data/runtime-ownership.json

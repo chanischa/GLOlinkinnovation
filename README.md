@@ -42,6 +42,28 @@ Then open **http://localhost:8080** in Chrome. The camera needs `localhost` or H
 
 > The frontend also runs standalone (double-click `index.html`) using an embedded seed dataset, but the camera and persistence only work when served over `http://localhost`.
 
+## Deploy to Render
+
+This repo includes a Dockerfile and `render.yaml` blueprint for a cloud web service.
+Render is a good fit for the prototype because the backend serves both the REST API
+and the frontend, and the app needs HTTPS for camera access.
+
+1. Push this repo to GitHub.
+2. In Render, choose **New +** -> **Blueprint**.
+3. Connect the GitHub repo and select the branch to deploy.
+4. Render will read `render.yaml`, build the Docker image, mount a 1 GB disk at
+   `/var/data`, seed SQLite on first boot, and expose `/api/health`.
+
+Cloud runtime settings:
+
+```env
+GLO_DB_PATH=/var/data/glo.db
+GLO_RUNTIME_STATE_PATH=/var/data/runtime-ownership.json
+```
+
+The database is created automatically if it does not exist. The mounted disk keeps
+claim/ownership state across restarts and deploys.
+
 ## How verification works
 
 ```
