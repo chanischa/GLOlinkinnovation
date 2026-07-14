@@ -1,10 +1,10 @@
 const CACHE_NAME = 'glo-ticket-verifier-v8';
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/manifest.webmanifest',
-  '/icons/icon.svg'
+  './',
+  'index.html',
+  'app.js',
+  'manifest.webmanifest',
+  'icons/icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -38,7 +38,7 @@ self.addEventListener('fetch', (event) => {
         const copy = res.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
         return res;
-      }).catch(() => caches.match('/index.html'))
+      }).catch(() => caches.match('index.html'))
     )
   );
 });
