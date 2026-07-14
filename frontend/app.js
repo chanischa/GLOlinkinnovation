@@ -105,10 +105,10 @@ async function apiLookup(barcode){
     try{
       const r=await fetch(`${API_BASE}/api/tickets/${encodeURIComponent(barcode)}`);
       if(r.ok) return await r.json();
-      if(r.status===404) return seedLookup(barcode);
+      if(r.status===404) return lookupOwnedTicket(barcode);
     }catch(e){/* fall through to seed */}
   }
-  return seedLookup(barcode);
+  return lookupOwnedTicket(barcode);
 }
 async function apiPost(path,body){
   if(API_BASE || location.protocol.startsWith('http')){
@@ -126,6 +126,39 @@ const S = {barcode:null,ticket:null,frontImg:null,backImg:null,ocr:null,pin:'',
 
 // mask a phone/id for display, e.g. 0898887777 -> 08x-xxx-7777
 function maskUserJS(id){const s=String(id); return s.length>=7? s.slice(0,2)+'x-xxx-'+s.slice(-4) : s.slice(0,2)+'***';}
+
+const OWNERSHIP_KEY='glo_demo_ownership_v1';
+const SAVED_KEY='glo_demo_saved_v1';
+function loadJSON(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'')||fallback;}catch(e){return fallback;}}
+function saveJSON(key,value){localStorage.setItem(key,JSON.stringify(value));}
+function ownershipStore(){return loadJSON(OWNERSHIP_KEY,{});}
+function savedStore(){return loadJSON(SAVED_KEY,{});}
+function applyLocalOwner(t){
+  if(!t) return null;
+  const owner=ownershipStore()[t.barcode];
+  return owner?{...t,owner_id:owner,owner_mask:maskUserJS(owner)}:{...t};
+}
+function lookupOwnedTicket(code){
+  const ticket=seedLookup(code);
+  return applyLocalOwner(ticket);
+}
+function userSavedTickets(userId=S.userId){
+  return savedStore()[String(userId)] || [];
+}
+function persistUserSaved(){
+  const all=savedStore();
+  all[String(S.userId)]=S.saved;
+  saveJSON(SAVED_KEY,all);
+}
+function persistOwnership(ticket,userId=S.userId){
+  const all=ownershipStore();
+  all[ticket.barcode]=String(userId);
+  saveJSON(OWNERSHIP_KEY,all);
+}
+function loadSavedForActiveUser(){
+  S.saved=userSavedTickets();
+  renderSaved();
+}
 
 // Capture the device location (used to stamp scan / collect / claim actions).
 function getLocation(){
@@ -151,7 +184,7 @@ async function apiOwnershipValidate(barcode){
       return {ok:r.ok,...data};
     }catch(e){}
   }
-  const t=seedLookup(barcode);
+  const t=lookupOwnedTicket(barcode);
   if(!t) return {ok:false,status:'not_found'};
   if(!t.owner_id) return {ok:false,status:'ownership_required',ticket:t};
   if(String(t.owner_id)!==String(S.userId)) return {ok:false,status:'ownership_conflict',owner_mask:maskUserJS(t.owner_id),ticket:t};
@@ -214,8 +247,8 @@ async function validateScannedCode(code){
       return await r.json();
     }catch(e){}
   }
-  const signatureTicket=signatureSeedLookup(code);
-  const ticket=signatureTicket || seedLookup(code);
+  const signatureTicket=applyLocalOwner(signatureSeedLookup(code));
+  const ticket=signatureTicket || lookupOwnedTicket(code);
   const scanned_number=scannedNumberFromCodeJS(code);
   const reasons=[];
   if(!ticket) reasons.push('barcode_not_found');
@@ -223,6 +256,7 @@ async function validateScannedCode(code){
   if(ticket && S.mode==='collect' && !scanned_number) reasons.push('scan_number_unavailable');
   if(ticket && S.mode==='collect' && ticket.owner_id) reasons.push(String(ticket.owner_id)===S.userId?'already_collected_by_you':'already_collected_by_other');
   if(ticket && S.mode==='collect' && S.saved.some(t=>t.barcode===ticket.barcode || t.number===ticket.number)) reasons.push('duplicate_number_collected');
+  if(ticket && S.mode==='collect' && !reasons.includes('duplicate_number_collected') && userSavedTickets().some(t=>t.barcode===ticket.barcode || t.number===ticket.number)) reasons.push('duplicate_number_collected');
   return {ok:reasons.length===0,reasons,scanned_number,parsed_payload:parsedDataMatrixCodeJS(code),lookup_method:signatureTicket?'signature':ticket?'fallback':'none',number_match:!!ticket&&(!scanned_number||scanned_number===ticket.number),already_collected:!!(ticket&&ticket.owner_id),owner_mask:ticket&&ticket.owner_id?maskUserJS(ticket.owner_id):null,ticket};
 }
 function scanReasonText(validation){
@@ -770,7 +804,7 @@ async function onCollect(){
   }
   if(!resp){ // offline fallback
     if(t.owner_id && String(t.owner_id)!==S.userId) resp={status:'ownership_conflict',owner_mask:maskUserJS(t.owner_id)};
-    else { t.owner_id=S.userId; resp={status:'registered'}; }
+    else { persistOwnership(t,S.userId); t.owner_id=S.userId; resp={status:'registered'}; }
   }
   if(resp.status==='already_yours' || resp.status==='duplicate_number_collected'){
     set('ck-owner', resp.status==='duplicate_number_collected'?'เลขสลากนี้ถูกเก็บเข้าบัญชีคุณแล้ว':'สลากนี้อยู่ในบัญชีคุณแล้ว','bad');
@@ -786,6 +820,7 @@ async function onCollect(){
   }
   if(resp.ticket) S.ticket={...t,...resp.ticket};
   else S.ticket={...t,owner_id:S.userId};
+  persistOwnership(S.ticket,S.userId);
   toast(resp.status==='already_yours'?'สลากนี้อยู่ในบัญชีคุณแล้ว':'เก็บสิทธิ์เข้าบัญชีสำเร็จ ✓');
   await showPrize(true);
   S.collectBusy=false;
@@ -800,6 +835,7 @@ async function showPrize(register){
     if(!S.saved.some(x=>x.barcode===t.barcode || x.number===t.number)){
       const now=new Date();
       S.saved.unshift({...t,owner_id:t.owner_id||S.userId,savedAt:now.toLocaleDateString('th-TH'),savedTime:now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})+' น.',collectedAtISO:now.toISOString(),geo:S.geo});
+      persistUserSaved();
     }
   }
   const win=t.prize_type&&t.prize_amount>0;
@@ -910,8 +946,7 @@ function resetFlow(){S.barcode=null;S.frontImg=null;S.backImg=null;S.ocr=null;
 function setUser(id){
   S.userId=String(id);
   localStorage.setItem('glo_user_id',S.userId);
-  S.saved=[];
-  renderSaved();
+  loadSavedForActiveUser();
   const label=document.getElementById('active-user-label');
   if(label) label.textContent='User '+S.userId;
   toast('เปลี่ยนผู้ใช้เป็น '+S.userId);
@@ -970,7 +1005,7 @@ applyVerificationCopy();
 applyUserSwitcher();
 applyHomeScanModes();
 const claimBtn=document.getElementById('prize-claim-btn'); if(claimBtn) claimBtn.onclick=beginClaim;
-renderSaved();
+loadSavedForActiveUser();
 if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
